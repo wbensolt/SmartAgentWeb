@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 from langgraph.graph import StateGraph, END
 from agents.vector.state_schema import GraphState
 from core.llm_providers import LLMManager
@@ -14,14 +14,15 @@ from agents.nodes.hr_agents.final_rh_agent import FinalRHAgent
 from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings
 import logging
+import re
+import json
 from utils.json_utils import JSONRepairer
 
-# Configuration du logger
 logger = logging.getLogger(__name__)
 CHROMA_PATH = "indexes/northwind_chroma"
 
+
 def get_local_retriever():
-    """Initialise et retourne le retriever Chroma"""
     try:
         embeddings = OllamaEmbeddings(model="mxbai-embed-large")
         return Chroma(
@@ -32,128 +33,163 @@ def get_local_retriever():
         logger.error(f"Erreur d'initialisation du retriever: {str(e)}")
         raise
 
+
+def clean_json_response(text: str) -> str:
+    # Nettoie la chaîne JSON brute pour enlever markdown, guillemets typographiques, etc.
+    cleaned = re.sub(r"^```json\s*|\s*```$", "", text.strip(), flags=re.IGNORECASE)
+    cleaned = cleaned.replace("“", "\"").replace("”", "\"").replace("‘", "'").replace("’", "'")
+    return cleaned
+
+
 def create_project_graph() -> StateGraph:
-    """Crée et configure le graphe de traitement RH avec gestion robuste des erreurs"""
     graph = StateGraph(GraphState)
-    
-    # Initialisation des agents avec gestion des erreurs
+
     try:
+        llm = LLMManager().get_llm()
         retriever = get_local_retriever()
-        dataanalyst = DataAnalystAgent(retriever=retriever)
-        recruiter = RecruiterAgent()
-        rh = RHAgent()
-        talent = TalentManagerAgent()
-        onboarding = OnboardingAgent()
-        payroll = PayrollAgent()
-        critique = CritiqueRHAgent()
-        validation = ValidationRHAgent()
-        final = FinalRHAgent()
+        dataanalyst = DataAnalystAgent(retriever=retriever, llm=llm)
+        recruiter = RecruiterAgent(llm=llm)
+        rh = RHAgent(llm=llm)
+        talent = TalentManagerAgent(llm=llm)
+        onboarding = OnboardingAgent(llm=llm)
+        payroll = PayrollAgent(llm=llm)
+        critique = CritiqueRHAgent(llm=llm)
+        validation = ValidationRHAgent(llm=llm)
+        final = FinalRHAgent(llm=llm)
     except Exception as e:
         logger.critical(f"Erreur d'initialisation des agents: {str(e)}")
         raise
 
     def safe_node_wrapper(agent, key: str, needs_data: bool = False):
-        """Wrapper sécurisé pour les nœuds avec gestion des erreurs"""
         def node(state: GraphState) -> Dict[str, Any]:
             try:
                 input_data = {"query": state["query"]}
-                
                 if needs_data and "data_analytics" in state:
                     input_data["data"] = state["data_analytics"]
-                
-                result = agent.invoke(input_data)
-                
-                # Validation et réparation du JSON
-                if isinstance(result, str):
-                    result = JSONRepairer.repair(result)
-                
+
+                raw_result = agent.invoke(input_data)
+
+                # Affichage debug réponse brute
+                print(f"\n[DEBUG] Réponse brute de l'agent {key} :\n{raw_result}")
+
+                if isinstance(raw_result, str):
+                    cleaned_result = clean_json_response(raw_result)
+                    print(f"[DEBUG] Réponse nettoyée de l'agent {key} :\n{cleaned_result}")
+                    result = JSONRepairer.safe_parse(cleaned_result)
+                else:
+                    result = raw_result
+
+                print(f"[DEBUG] Réponse parsée JSON de l'agent {key} :\n{json.dumps(result, indent=2, ensure_ascii=False)}")
+
                 return {key: result}
-                
+
             except Exception as e:
                 logger.error(f"Erreur dans le nœud {key}: {str(e)}")
-                return {
-                    key: {
-                        "error": str(e),
-                        "stack_trace": f"{type(e).__name__}: {str(e)}"
-                    }
-                }
+                new_state = dict(state)
+                new_state[key] = {"error": str(e), "status": "failed"}
+                return new_state
+
         return node
 
     def critique_node(state: GraphState) -> Dict[str, Any]:
-        """Nœud de critique avec validation des données"""
         try:
             content_parts = []
             required_nodes = ["recruiter", "rh", "talent", "onboarding", "payroll"]
-            
+
             for node in required_nodes:
-                if node in state:
+                if node in state and state[node]:
                     content = str(state[node])
-                    if len(content) > 2000:  # Limite de taille
-                        content = content[:1000] + " [...] " + content[-1000:]
+                    if len(content) > 1500:
+                        content = content[:750] + " [...] " + content[-750:]
                     content_parts.append(f"{node.upper()}:\n{content}")
-            
+
             if not content_parts:
-                return {"critique": {"error": "Aucune donnée à analyser"}}
-            
-            critique_input = {"content": "\n\n".join(content_parts)[:10000]}  # Limite totale
-            return {"critique": critique.invoke(critique_input)}
-            
+                new_state = dict(state)
+                new_state["critique"] = {"error": "Aucune donnée à analyser"}
+                return new_state
+
+            critique_input = {"content": "\n\n".join(content_parts)[:8000]}
+            critique_result = critique.invoke(critique_input)
+            return {"critique": critique_result}
+
         except Exception as e:
             logger.error(f"Erreur dans critique_node: {str(e)}")
-            return {"critique": {"error": str(e)}}
+            new_state = dict(state)
+            new_state["critique"] = {"error": str(e)}
+            return new_state
 
     def validation_node(state: GraphState) -> Dict[str, Any]:
-        """Nœud de validation avec parsing sécurisé"""
         try:
             critique_content = state.get("critique", {})
-            if isinstance(critique_content, str):
-                critique_content = JSONRepairer.repair(critique_content)
-                
+
             if not critique_content or "error" in critique_content:
-                return {"validation": {"validation": "non valide", "justification": "Critique invalide"}}
-                
+                new_state = dict(state)
+                new_state["validation"] = {
+                    "validation": "non valide",
+                    "justification": "Critique invalide ou manquante"
+                }
+                return new_state
+
             validation_result = validation.invoke({"critique": critique_content})
-            
-            # Post-processing pour garantir le format
-            if isinstance(validation_result, str):
-                validation_result = JSONRepairer.repair(validation_result)
-                
             return {"validation": validation_result}
-            
+
         except Exception as e:
             logger.error(f"Erreur dans validation_node: {str(e)}")
-            return {"validation": {
+            new_state = dict(state)
+            new_state["validation"] = {
                 "validation": "erreur",
                 "justification": str(e)[:200]
-            }}
+            }
+            return new_state
 
     def final_node(state: GraphState) -> Dict[str, Any]:
-        """Nœud final avec agrégation sécurisée"""
         try:
+            agent_responses = {}
+            for key in ["data_analytics", "recruiter", "rh", "talent", "onboarding", "payroll"]:
+                if key in state and state[key]:
+                    agent_responses[key] = state[key]
+
+            print("\n===== Réponses individuelles des agents =====")
+            for k, v in agent_responses.items():
+                print(f"\n--- {k.upper()} ---")
+                if isinstance(v, dict):
+                    print(json.dumps(v, indent=2, ensure_ascii=False))
+                else:
+                    print(v)
+
             inputs = {
-                "answers": "\n".join(
-                    str(state.get(k, "")) 
-                    for k in ["recruiter", "rh", "talent", "onboarding", "payroll"]
-                ),
+                "answers": agent_responses,
                 "critiques": state.get("critique", {}),
                 "validations": state.get("validation", {})
             }
-            
-            # Nettoyage des inputs
-            for key in inputs:
-                if isinstance(inputs[key], str):
-                    inputs[key] = JSONRepairer.repair(inputs[key])
-            
-            return {"final_answer": final.invoke(inputs)}
-            
+
+            final_result = final.invoke(inputs)
+
+            print("\n===== Réponse finale =====")
+            if isinstance(final_result, dict):
+                print(json.dumps(final_result, indent=2, ensure_ascii=False))
+            else:
+                print(final_result)
+
+            return {
+                "agent_answers": agent_responses,
+                "final_answer": final_result
+            }
+
         except Exception as e:
             logger.error(f"Erreur dans final_node: {str(e)}")
-            return {"final_answer": {
-                "error": str(e),
-                "recovery_suggestion": "Vérifier les logs système"
-            }}
+            return {
+                "agent_answers": {},
+                "final_answer": {
+                    "faisabilite": "Erreur",
+                    "conditions_reussite": ["Vérifier les logs système"],
+                    "score_confiance": 0.0,
+                    "recommandation": f"Erreur de traitement: {str(e)[:200]}",
+                    "risques_principaux": ["Erreur technique dans l'analyse"]
+                }
+            }
 
-    # Configuration des nœuds
+    # Configuration des noeuds
     nodes_config = [
         ("dataanalyst", dataanalyst, "data_analytics", False),
         ("recruiter", recruiter, "recruiter", True),
@@ -162,25 +198,21 @@ def create_project_graph() -> StateGraph:
         ("onboarding", onboarding, "onboarding", False),
         ("payroll", payroll, "payroll", False)
     ]
-    
+
     for name, agent, key, needs_data in nodes_config:
         graph.add_node(name, safe_node_wrapper(agent, key, needs_data))
-    
-    # Ajout des nœuds spéciaux
+
     graph.add_node("critique", critique_node)
     graph.add_node("validation", validation_node)
     graph.add_node("final", final_node)
 
-    # Configuration du workflow
     graph.set_entry_point("dataanalyst")
-    
-    # Branchement principal
+
     main_nodes = ["rh", "recruiter", "talent", "onboarding", "payroll"]
     for node in main_nodes:
         graph.add_edge("dataanalyst", node)
         graph.add_edge(node, "critique")
-    
-    # Flux final
+
     graph.add_edge("critique", "validation")
     graph.add_edge("validation", "final")
     graph.add_edge("final", END)

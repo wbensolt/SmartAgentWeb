@@ -7,7 +7,7 @@ from dateutil.parser import parse
 import logging
 
 class OnboardingAgent(Runnable):
-    def __init__(self):
+    def __init__(self, llm=None):
         self.llm = LLMManager().get_llm()
         self.logger = logging.getLogger(__name__)
         self.default_time_estimate = timedelta(days=30)
@@ -68,29 +68,28 @@ class OnboardingAgent(Runnable):
             start_date = input.get("start_date")
 
             # 2. Prompt structuré avec exemple de sortie
-            prompt = f"""### Mission ###
-Génère un plan d'onboarding pour:
-{query}
+            prompt = f"""
+                    [SYSTEM]
+                    Tu es expert en intégration RH.
 
-### Contraintes ###
-- Equipe: {team_size} personnes
-- Format JSON strict
-- Durée maximale: 90 jours
+                    Tu dois estimer les besoins pour accueillir des collaborateurs dans de bonnes conditions (RH, matériel, tuteurs, planning).
 
-### Format Requis ###
-{{
-  "resources": {{
-    "rh": "nombre de RH (1-5)",
-    "tutors": "nombre de tuteurs",
-    "tools": ["liste", "d'outils"]
-  }},
-  "timeline": {{
-    "estimated_duration": "XX jours",
-    "per_person_days": "nombre"
-  }},
-  "risks": ["liste", "de risques"],
-  "checklist": ["étapes", "clés"]
-}}"""
+                    Réponds uniquement avec un JSON VALIDE :
+                    {
+                    "resources": {
+                        "rh": nombre_rh,
+                        "tutors": nombre_tuteurs,
+                        "tools": ["outil 1", "outil 2"]
+                    },
+                    "timeline": {
+                        "estimated_duration": "ex: 30 jours",
+                        "per_person_days": nombre
+                    },
+                    "risks": ["risque 1", "risque 2"],
+                    "checklist": ["étape 1", "étape 2"]
+                    }
+                    - Aucune balise markdown.
+                    """
 
             # 3. Appel LLM sécurisé
             raw_response = self.llm.invoke(prompt)

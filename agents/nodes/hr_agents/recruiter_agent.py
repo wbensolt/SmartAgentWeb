@@ -32,7 +32,10 @@ class RecruiterAgent(Runnable):
             "error": Optional[str]
         }
     """
-    
+    def __init__(self, llm=None):
+        self.llm = llm or LLMManager().get_llm()
+        self.logger = logging.getLogger(__name__)
+        
     def invoke(self, input: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """
         Recherche sécurisée de candidats avec format de sortie standardisé.

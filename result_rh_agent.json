@@ -1,0 +1,7 @@
+{
+  "response": "Erreur: Erreur parsing JSON brut : Expecting ',' delimiter: line 2 column 112 (char 113)",
+  "legal_references": {},
+  "compliance_status": "non_conforme",
+  "error": true,
+  "error_details": "Erreur parsing JSON brut : Expecting ',' delimiter: line 2 column 112 (char 113)"
+}

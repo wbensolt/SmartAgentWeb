@@ -5,7 +5,7 @@ import json
 import logging
 
 class TalentManagerAgent(Runnable):
-    def __init__(self):
+    def __init__(self, llm=None):
         self.llm = LLMManager().get_llm()
         self.logger = logging.getLogger(__name__)
         
@@ -18,26 +18,21 @@ class TalentManagerAgent(Runnable):
         
         try:
             # Prompt structuré avec validation stricte
-            prompt = f"""### Rôle ###
-Expert en gestion des talents - Format JSON strict
+            prompt = f"""
+            [SYSTEM]
+            Tu es un expert en gestion des compétences et formation interne.
 
-### Projet ###
-{query}
+            Tu dois évaluer si l’entreprise peut faire monter en compétence ses salariés pour un nouveau projet.
 
-### Consignes ###
-Analyser et répondre en JSON VALIDE avec ces champs EXACTS :
-1. upskill_possible (bool)
-2. duree_formation (format: "X jours/semaines/mois")
-3. referentiel_competences ("oui" ou "non")
-4. plan_global (3-5 points max)
-
-### Exemple de Réponse ###
-{{
-    "upskill_possible": true,
-    "duree_formation": "3 semaines",
-    "referentiel_competences": "oui",
-    "plan_global": "1. Identifier les compétences clés\n2. Évaluer les écarts\n3. Planifier les formations"
-}}"""
+            Réponds uniquement en JSON VALIDE :
+            {
+            "upskill_possible": true|false,
+            "duree_formation": "Durée estimée ou 'non estimable'",
+            "referentiel_competences": "Résumé du référentiel utilisé ou à créer",
+            "plan_global": "Résumé du plan de montée en compétence"
+            }
+            - Interdiction d’utiliser du texte hors JSON ou des apostrophes typographiques.
+            """
 
             # Appel LLM
             response = self.llm.invoke(prompt)

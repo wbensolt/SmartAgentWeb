@@ -5,7 +5,7 @@ import json
 import logging
 
 class PayrollAgent(Runnable):
-    def __init__(self):
+    def __init__(self, llm=None):
         self.llm = LLMManager().get_llm()
         self.logger = logging.getLogger(__name__)
         
@@ -27,22 +27,22 @@ class PayrollAgent(Runnable):
         try:
             query = str(input.get("query", ""))[:500]  # Limite la longueur
             
-            prompt = f"""ANALYSE PAIE - FORMAT JSON STRICT
-            Demande : {query}
-            
-            Consignes :
-            1. Coût mensuel (ex: "3 500€")
-            2. Budget suffisant ("oui"/"non")
-            3. Analyse marché (30 mots max)
-            4. 3-5 recommandations
-            
-            Modèle de réponse :
-            {{
-                "cout_mensuel": "X€",
-                "budget_suffisant": "oui/non",
-                "analyse_marche": "texte synthétique",
-                "recommandations": ["item1", "item2"]
-            }}"""
+            prompt = f"""
+            [SYSTEM]
+            Tu es un expert paie et budget.
+
+            Calcule le coût mensuel approximatif et analyse la faisabilité du budget projet.
+
+            Réponds en JSON VALIDE au format :
+            {
+            "cout_mensuel": "ex: 133k€",
+            "budget_suffisant": "oui|non",
+            "analyse_cout": "Explication brève de ton évaluation budgétaire",
+            "recommandations": ["Suggestion 1", "Suggestion 2"]
+            }
+            - Aucune phrase ou bloc de code en dehors du JSON.
+            - Sois cohérent avec les profils envisagés (junior, alternants…).
+            """
             
             # Appel LLM sécurisé
             raw_response = self.llm.invoke(prompt)

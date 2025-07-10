@@ -9,7 +9,7 @@ class ValidationResponse(TypedDict):
     justification: str
 
 class ValidationRHAgent(Runnable):
-    def __init__(self):
+    def __init__(self, llm=None):
         self.llm = LLMManager().get_llm()
         self.logger = logging.getLogger(__name__)
         self._default_response = {
@@ -24,7 +24,7 @@ class ValidationRHAgent(Runnable):
             if not critique.strip():
                 return self._error_response("Critique vide")
 
-            prompt = """Validation RH - Format JSON strict
+            prompt = f"""Validation RH - Format JSON strict
 
 Critique à évaluer:
 {critique}
