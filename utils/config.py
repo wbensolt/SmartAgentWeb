@@ -19,7 +19,7 @@ class SmartAgentConfig(BaseSettings):
 
     # === Modèles ===
     llm_provider: str = Field(default="groq", description="Provider de LLM (ollama ou groq)")
-    llm_model: str = Field(default="meta-llama/llama-4-scout-17b-16e-instruct", description="Nom du modèle LLM à utiliser")
+    llm_model: str = Field(default="llama3-70b-8192", description="Nom du modèle LLM à utiliser")
     embedding_model: str = Field(default="paraphrase-multilingual:278m-mpnet-base-v2-fp16", description="Modèle pour les embeddings")
 
     # === Clés API ===

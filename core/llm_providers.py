@@ -48,7 +48,7 @@ class OllamaProvider(LLMProvider):
 
 
 class GroqProvider(LLMProvider):
-    def __init__(self, api_key: str, model: str = "meta-llama/llama-4-scout-17b-16e-instruct", temperature: float = 0.7):
+    def __init__(self, api_key: str, model: str = "llama3-70b-8192", temperature: float = 0.7):#"meta-llama/llama-4-scout-17b-16e-instruct"
         self.api_key = api_key
         self.model_name = model
         self.temperature = temperature
