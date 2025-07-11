@@ -59,7 +59,7 @@ class RHResponse(BaseModel):
     error_details: Optional[str] = None
 
 class DataAnalystInsight(BaseModel):
-    bassin_emploi: str = Field(..., max_length=200)
+    bassin_emploi: str = Field(..., max_length=1000)
     disponibilite_profils: str = Field(..., max_length=1000)
     tendances_marche: List[str] = Field(..., max_items=5)
     budget_moyen: Optional[float] = None
