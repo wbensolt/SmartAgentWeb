@@ -4,7 +4,7 @@ import json
 import logging
 
 class MetaAgent(Runnable):
-    def __init__(self, llm=None, agents_map=None, max_iterations=2):
+    def __init__(self, llm=None, agents_map=None, max_iterations=4):
         """
         llm : LLM pour analyser les réponses et détecter incohérences
         agents_map : dict {agent_key: agent_instance} pour relancer questions ciblées

@@ -41,11 +41,24 @@ class RecruiterAgent(Runnable):
             competences_retenues = [c for c in competences_recherchees if c.lower() not in competences_exclues]
 
             if not competences_retenues:
-                return {
+                """return {
                     "status": "success",
                     "profils": [],
                     "message": "Aucune compétence à rechercher : déjà disponibles en interne.",
                     "competences_evitees": list(competences_exclues)
+                }"""
+                            # --- Injection volontaire d'incohérence ---
+                # Même si compétences internes disponibles, on force une recherche pour "energie solaire"
+                competences_retenues = ["energie solaire"]
+                profils = []  # Pas de profils trouvés => incohérence avec data_analytics
+
+                return {
+                    "status": "success",
+                    "profils": profils,
+                    "message": "Injection test : Recherche forcée de 'energie solaire' malgré disponibilité interne.",
+                    "competences_evitees": list(competences_exclues),
+                    "competences_recherchees_finales": competences_retenues,
+                    "incoherence_test": True
                 }
 
             # 🔎 Recherche ciblée

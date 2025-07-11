@@ -1,11 +1,29 @@
 import json
 import logging
+import re
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 from langchain_core.runnables import Runnable
 from core.llm_providers import LLMManager
 from agents.nodes.hr_agents.schema import DataAnalystInsight
 from langchain.output_parsers import PydanticOutputParser, OutputFixingParser
+
+
+def extract_json_from_text(text: str) -> str:
+    """
+    Extrait un JSON basique en prenant la première portion entre accolades.
+    """
+    start = text.find('{')
+    end = text.rfind('}')
+    if start != -1 and end != -1 and end > start:
+        return text[start:end+1]
+    # fallback : nettoyage simple
+    cleaned = text.strip()
+    if cleaned.startswith("```json"):
+        cleaned = cleaned[7:]
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3]
+    return cleaned.strip()
 
 
 class DataAnalystAgent(Runnable):
@@ -40,26 +58,32 @@ class DataAnalystAgent(Runnable):
             Question :
             {query}
 
-            Réponds uniquement avec un JSON VALIDE du type :
+            Réponds UNIQUEMENT avec un JSON VALIDE du type :
             {{
-            "bassin_emploi": "Description claire du marché local (ville/région)",
-            "disponibilite_profils": "Résumé de la disponibilité des profils pour ce projet",
-            "tendances_marche": ["Tendance 1", "Tendance 2"],
-            "budget_moyen": 0,
-            "delai_moyen_lancement_projet": 0,
-            "capacites_disponibles": [
-                {{"competence": "Nom", "effectif": 0}}
-            ],
-            "erreur": null
+              "bassin_emploi": "Description claire du marché local (ville/région)",
+              "disponibilite_profils": "Résumé de la disponibilité des profils pour ce projet",
+              "tendances_marche": ["Tendance 1", "Tendance 2"],
+              "budget_moyen": 0,
+              "delai_moyen_lancement_projet": 0,
+              "capacites_disponibles": [
+                  {{"competence": "Nom", "effectif": 0}}
+              ],
+              "erreur": null
             }}
 
             - Sois synthétique, orienté décision.
             - N'utilise pas de guillemets simples ni de blocs de code.
-                        """
+            """
 
             raw_response = self.llm.invoke(prompt)
-            cleaned = raw_response.strip().replace("```json", "").replace("```", "").strip()
-            parsed = self.fixing_parser.parse(cleaned)
+            cleaned = extract_json_from_text(raw_response)
+
+            try:
+                parsed = self.fixing_parser.parse(cleaned)
+            except Exception as e:
+                self.logger.error(f"[DataAnalystAgent] Erreur parsing JSON: {str(e)} - Raw response: {raw_response}")
+                raise e
+
             return parsed.dict()
 
         except Exception as e:

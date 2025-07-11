@@ -19,7 +19,7 @@ class TalentManagerAgent(Runnable):
 
         budget_moyen = data_analytics.get("budget_moyen", "inconnu")
         delai_moyen = data_analytics.get("delai_moyen_lancement_projet", "inconnu")
-        competences = data_analytics.get("capacites_disponibles", [])
+        competences = data_analytics.get("capacites_disponibles") or []
         competences_str = ", ".join(c.get("competence", "") for c in competences)
 
         contexte_entreprise = (
