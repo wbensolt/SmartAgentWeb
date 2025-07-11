@@ -117,3 +117,4 @@ poetry.lock
 **/migrations/__pycache__/
 migration/
 theme/
+outputs/

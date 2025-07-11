@@ -23,24 +23,24 @@ class DataAnalystAgent(Runnable):
             context = "\n".join(d.page_content for d in docs[:3])
 
             prompt = f"""
-[SYSTEM]
-Tu es un expert en data RH et analyse de marché pour les services en France.
+                [SYSTEM]
+                Tu es un expert en data RH et analyse de marché pour les services en France.
 
-Contexte :
-{context}
+                Contexte :
+                {context}
 
-Question :
-{query}
+                Question :
+                {query}
 
-Réponds uniquement avec un JSON VALIDE du type :
-{{
-  "bassin_emploi": "Description claire du marché local (ville/région)",
-  "disponibilite_profils": "Résumé de la disponibilité des profils pour ce projet",
-  "tendances_marche": ["Tendance 1", "Tendance 2"]
-}}
-- Sois synthétique et orienté décision.
-- Interdiction d'utiliser des blocs de code ou des guillemets simples.
-"""
+                Réponds uniquement avec un JSON VALIDE du type :
+                {{
+                "bassin_emploi": "Description claire du marché local (ville/région)",
+                "disponibilite_profils": "Résumé de la disponibilité des profils pour ce projet",
+                "tendances_marche": ["Tendance 1", "Tendance 2"]
+                }}
+                - Sois synthétique et orienté décision.
+                - Interdiction d'utiliser des blocs de code ou des guillemets simples.
+                """
 
             raw_response = self.llm.invoke(prompt)
             cleaned = raw_response.strip().replace("```json", "").replace("```", "").strip()
