@@ -17,6 +17,8 @@ import logging
 import re
 import json
 from utils.json_utils import JSONRepairer
+from datetime import datetime
+import os
 
 logger = logging.getLogger(__name__)
 CHROMA_PATH = "indexes/northwind_chroma"
@@ -170,6 +172,30 @@ def create_project_graph() -> StateGraph:
                 print(json.dumps(final_result, indent=2, ensure_ascii=False))
             else:
                 print(final_result)
+
+            # === Génération du nom de fichier ===
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            slug = (
+                re.sub(r"[^a-zA-Z0-9\-]+", "_", state.get("query", "no_query"))
+                .strip("_")
+                .lower()
+            )
+            filename = f"smart_project_{slug}_{timestamp}.json"
+            save_dir = "outputs"
+            os.makedirs(save_dir, exist_ok=True)
+            filepath = os.path.join(save_dir, filename)
+
+            # === Sauvegarde dans le fichier JSON ===
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump({
+                    "query": state.get("query", ""),
+                    "agent_answers": agent_responses,
+                    "critique": state.get("critique", {}),
+                    "validation": state.get("validation", {}),
+                    "final_answer": final_result
+                }, f, indent=2, ensure_ascii=False)
+
+            print(f"\n✅ Résultats enregistrés dans : {filepath}")
 
             return {
                 "agent_answers": agent_responses,

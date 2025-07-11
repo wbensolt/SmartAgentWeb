@@ -4,6 +4,8 @@ from langchain_groq import ChatGroq
 from langchain.schema import AIMessage
 from langchain.llms.base import LLM
 from pydantic import PrivateAttr
+import logging
+from langchain_core.runnables import Runnable  # Assure-toi que ce chemin est correct
 
 try:
     from langchain_ollama import OllamaLLM
@@ -15,7 +17,7 @@ from utils.config import get_config, reset_config
 
 class LLMProvider(ABC):
     """Interface abstraite pour les providers LLM"""
-    
+
     @abstractmethod
     def invoke(self, prompt: str) -> str:
         pass
@@ -69,6 +71,28 @@ class GroqProvider(LLMProvider):
         }
 
 
+class GroqRunnableAdapter(Runnable):
+    def __init__(self, groq_provider):
+        self.groq_provider = groq_provider
+        self.logger = logging.getLogger(__name__)
+
+    def invoke(self, input: Any, config: Optional[Dict[str, Any]] = None) -> str:
+        try:
+            if hasattr(input, "to_string"):
+                prompt = input.to_string()
+            else:
+                prompt = str(input)
+            raw_response = self.groq_provider.invoke(prompt)
+            return raw_response
+        except Exception as e:
+            self.logger.error(f"Erreur GroqRunnableAdapter: {str(e)}")
+            return f"Erreur interne: {str(e)}"
+
+    async def ainvoke(self, input: Any, config: Optional[Dict[str, Any]] = None) -> str:
+        return self.invoke(input, config)
+
+
+
 class LLMManager:
     def __init__(self):
         reset_config()
@@ -85,7 +109,11 @@ class LLMManager:
                 temperature=self.config.temperature
             )
 
-    def get_llm(self) -> LLMProvider:
+    def get_llm(self) -> Runnable:
+        # Si c’est GroqProvider, on renvoie l’adaptateur Runnable
+        if isinstance(self.provider, GroqProvider):
+            return GroqRunnableAdapter(self.provider)
+        # OllamaProvider est supposé être compatible Runnable, sinon créer un adapter similaire
         return self.provider
 
     def set_provider(self, provider: LLMProvider):

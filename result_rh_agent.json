@@ -1,7 +1,10 @@
 {
-  "response": "Erreur: Erreur parsing JSON brut : Expecting ',' delimiter: line 2 column 112 (char 113)",
-  "legal_references": {},
-  "compliance_status": "non_conforme",
-  "error": true,
-  "error_details": "Erreur parsing JSON brut : Expecting ',' delimiter: line 2 column 112 (char 113)"
+  "response": "Oui, il est possible de lancer un service client à Lille pour 15 personnes dans le domaine de l'énergie verte sous 3 mois avec un budget de 400k€. Cependant, il convient de vérifier les exigences légales en matière de déclaration et d'immatriculation de l'entreprise, ainsi que les obligations en termes de contrat de travail et de conditions de travail.",
+  "legal_references": {
+    "code_du_travail": "L. 123-1 et suivants",
+    "convention_collective": "IDCC 1486"
+  },
+  "compliance_status": "à_verifier",
+  "error": false,
+  "error_details": null
 }
