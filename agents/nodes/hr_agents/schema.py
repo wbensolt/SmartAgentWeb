@@ -1,6 +1,6 @@
 # agents/nodes/hr_agents/schema.py
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 class TalentPlan(BaseModel):
@@ -60,6 +60,9 @@ class RHResponse(BaseModel):
 
 class DataAnalystInsight(BaseModel):
     bassin_emploi: str = Field(..., max_length=200)
-    disponibilite_profils: str = Field(..., max_length=200)
+    disponibilite_profils: str = Field(..., max_length=1000)
     tendances_marche: List[str] = Field(..., max_items=5)
+    budget_moyen: Optional[float] = None
+    delai_moyen_lancement_projet: Optional[int] = None
+    capacites_disponibles: Optional[List[Dict[str, Any]]] = None
     erreur: Optional[str] = None

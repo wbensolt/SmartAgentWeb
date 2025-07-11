@@ -50,10 +50,29 @@ class RHAgent(Runnable):
             if not question.strip():
                 raise ValueError("Question vide")
 
-            context = json.dumps(input.get("context", {}), ensure_ascii=False)[:1000]
+            # Extraire le contexte d'entreprise partagé
+            state = input.get("state", {})
+            data_analytics = state.get("data_analytics", {})
+
+            # Synthèse courte des données internes pour le prompt RH
+            budget_moyen = data_analytics.get("budget_moyen", "inconnu")
+            delai_moyen = data_analytics.get("delai_moyen_lancement_projet", "inconnu")
+            competences = data_analytics.get("capacites_disponibles", [])
+            competences_str = ", ".join(c.get("competence", "") for c in competences)
+
+            # Préparation du contexte JSON réduit + données internes
+            contexte = {
+                "entreprise": {
+                    "budget_moyen": budget_moyen,
+                    "delai_moyen_lancement_projet": delai_moyen,
+                    "competences_internes": competences_str
+                },
+                "contexte_externe": input.get("context", {})
+            }
+            contexte_json = json.dumps(contexte, ensure_ascii=False)[:1000]
 
             prompt = (
-                f"{self.system_prompt}\n\n[QUESTION]\n{question}\n\n[CONTEXTE]\n{context}\n\n"
+                f"{self.system_prompt}\n\n[QUESTION]\n{question}\n\n[CONTEXTE]\n{contexte_json}\n\n"
                 f"[EXIGENCES]\n- Réponse en JSON VALIDE\n- Maximum {self.max_output_length} caractères\n- Citer au moins 1 article de loi"
             )
 
@@ -63,10 +82,6 @@ class RHAgent(Runnable):
             cleaned_response = self._clean_response(raw_response)
             parsed = self.fixing_parser.parse(cleaned_response)
             result = parsed.dict()
-
-            # Sauvegarde optionnelle
-            # with open("result_rh_agent.json", "w", encoding="utf-8") as f:
-            #     json.dump(result, f, ensure_ascii=False, indent=2)
 
             return result
 

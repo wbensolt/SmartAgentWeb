@@ -14,13 +14,30 @@ class TalentManagerAgent(Runnable):
 
     def invoke(self, input: Dict[str, Any]) -> Dict[str, Any]:
         query = str(input.get("query", ""))[:2000]
+        state = input.get("state", {})
+        data_analytics = state.get("data_analytics", {})
+
+        budget_moyen = data_analytics.get("budget_moyen", "inconnu")
+        delai_moyen = data_analytics.get("delai_moyen_lancement_projet", "inconnu")
+        competences = data_analytics.get("capacites_disponibles", [])
+        competences_str = ", ".join(c.get("competence", "") for c in competences)
+
+        contexte_entreprise = (
+            f"Budget moyen des projets: {budget_moyen} €, "
+            f"Délai moyen lancement: {delai_moyen} jours, "
+            f"Compétences internes disponibles: {competences_str}"
+        )
 
         try:
             prompt = f"""
             Tu es un expert en gestion des compétences et formation interne.
             Tu dois évaluer si l'entreprise peut faire monter en compétence ses salariés pour un nouveau projet.
 
-            Contexte : {query}
+            Contexte projet + marché:
+            {query}
+
+            Contexte interne de l'entreprise:
+            {contexte_entreprise}
 
             Réponds avec un JSON strictement conforme au schéma suivant:
             - upskill_possible: bool (true/false si la montée en compétence est possible)
@@ -42,10 +59,8 @@ class TalentManagerAgent(Runnable):
             response = self.llm.invoke(prompt)
             self.logger.debug(f"Raw LLM response: {response}")
 
-            # Nettoyage du texte pour enlever les blocs markdown éventuels
             cleaned_response = response
             if isinstance(cleaned_response, dict):
-                # Au cas où, on récupère la chaîne dans la clé 'response' si c’est un dict
                 cleaned_response = cleaned_response.get("response", "")
             cleaned_response = cleaned_response.strip()
             if cleaned_response.startswith("```json"):
@@ -54,7 +69,6 @@ class TalentManagerAgent(Runnable):
                 cleaned_response = cleaned_response[:-3]
             cleaned_response = cleaned_response.strip()
 
-            # Parsing et correction automatique
             parsed = self.fixing_parser.parse(cleaned_response)
             return parsed.dict()
 

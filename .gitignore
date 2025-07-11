@@ -118,3 +118,6 @@ poetry.lock
 migration/
 theme/
 outputs/
+data/
+data/*
+init_company_db.py
