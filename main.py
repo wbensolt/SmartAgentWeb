@@ -1,5 +1,3 @@
-# === FICHIER: main.py ===
-
 import sys
 import json
 import re
@@ -20,10 +18,19 @@ from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings
 
 
-def clean_response(text):
+def clean_response(text: str) -> str:
+    """Nettoie la réponse brute pour faciliter le parsing JSON."""
     cleaned = text.strip()
+    # Supprimer les balises ```json``` ou ```
     cleaned = re.sub(r"```json|```", "", cleaned, flags=re.IGNORECASE).strip()
-    cleaned = cleaned.replace("“", "\"").replace("”", "\"").replace("‘", "'").replace("’", "'")
+    # Remplacer les guillemets typographiques par des guillemets standards
+    cleaned = (
+        cleaned
+        .replace("“", "\"")
+        .replace("”", "\"")
+        .replace("‘", "'")
+        .replace("’", "'")
+    )
     return cleaned
 
 
@@ -31,12 +38,13 @@ def run_smart_agent():
     print("🧠 Lancement du Smart RH Project Agent...")
     graph = create_project_graph().compile()
     while True:
-        query = input("\nPose ta question (ou 'exit') > ")
+        query = input("\nPose ta question (ou 'exit') > ").strip()
         if query.lower() == "exit":
             break
-        result = graph.invoke({"query": query})
 
+        result = graph.invoke({"query": query})
         raw_response = result.get("final_answer", result)
+
         print("[DEBUG] Réponse brute avant nettoyage :")
         print(raw_response)
 
@@ -46,15 +54,15 @@ def run_smart_agent():
                 parsed = json.loads(cleaned)
                 print("\n=== ✅ Réponse Smart Agent (JSON validé) ===")
                 print(json.dumps(parsed, indent=2, ensure_ascii=False))
-            except Exception as e:
-                print(f"Réponse JSON invalide : {str(e)}")
+            except json.JSONDecodeError as e:
+                print(f"❌ Réponse JSON invalide : {str(e)}")
                 print("Tentative d'afficher la réponse brute :")
                 print(raw_response)
         elif isinstance(raw_response, dict):
             print("\n=== ✅ Réponse Smart Agent (dict déjà parsé) ===")
             print(json.dumps(raw_response, indent=2, ensure_ascii=False))
         else:
-            print(f"Réponse inattendue de type {type(raw_response)} :")
+            print(f"⚠️ Réponse inattendue de type {type(raw_response)} :")
             print(raw_response)
 
         print("=================================\n")
@@ -65,9 +73,10 @@ def run_rh_agent():
     ensure_index()
     graph = create_dynamic_rh_graph().compile()
     while True:
-        query = input("\nPose ta question RH (ou 'exit') > ")
+        query = input("\nPose ta question RH (ou 'exit') > ").strip()
         if query.lower() == "exit":
             break
+
         result = graph.invoke({"query": query})
         print("\n=== ✅ Réponse Finale de l'Agent RH ===")
         print(result.get("final_answer", "Aucune réponse générée."))
@@ -105,18 +114,22 @@ def run_single_agent():
         AgentClass = agents[key]
         llm = LLMManager().get_llm()
 
+        # Préparer les données d'entrée spécifiques selon l'agent
         if key == "dataanalyst":
-            retriever = Chroma(persist_directory="indexes/northwind_chroma", embedding_function=OllamaEmbeddings(model="mxbai-embed-large")).as_retriever()
+            retriever = Chroma(
+                persist_directory="indexes/northwind_chroma",
+                embedding_function=OllamaEmbeddings(model="mxbai-embed-large")
+            ).as_retriever()
             agent = AgentClass(retriever=retriever, llm=llm)
-            input_data = {"query": input("\nTa question > ")}
+            input_data = {"query": input("\nTa question > ").strip()}
         elif key == "validation":
-            input_data = {"critique": input("\nDonne une critique > ")}
+            input_data = {"critique": input("\nDonne une critique > ").strip()}
             agent = AgentClass(llm=llm)
         elif key == "final":
             input_data = {"answers": {}, "critiques": {}, "validations": {}}
             agent = AgentClass(llm=llm)
         else:
-            input_data = {"query": input("\nTa question > ")}
+            input_data = {"query": input("\nTa question > ").strip()}
             agent = AgentClass(llm=llm)
 
         result = agent.invoke(input_data)

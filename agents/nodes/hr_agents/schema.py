@@ -1,6 +1,6 @@
 # agents/nodes/hr_agents/schema.py
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field
 
 class TalentPlan(BaseModel):
@@ -38,7 +38,8 @@ class CritiqueRHPlan(BaseModel):
     suggestions: List[str]
     note_coherence: int  # entre 0 et 5
     commentaire_global: str
-
+    erreur: Optional[bool] = False
+    
 class ValidationRHPlan(BaseModel):
     validation: str = Field(..., pattern="^(valide|non valide)$")
     justification: str = Field(..., max_length=50)
@@ -52,11 +53,14 @@ class FinalRHPlan(BaseModel):
     erreur: Optional[bool] = False
 
 class RHResponse(BaseModel):
-    response: str = Field(..., max_length=5000)
-    legal_references: Dict[str, str] = Field(default_factory=dict)
-    compliance_status: str = Field(..., pattern="^(conforme|à_verifier|non_conforme)$")
-    error: Optional[bool] = False
-    error_details: Optional[str] = None
+    response: str
+    legal_references: Dict[str, Union[str, list]] = {
+        "code_du_travail": [],
+        "convention_collective": ""
+    }
+    compliance_status: str
+    error: bool = False
+    error_details: str | None = None
 
 class DataAnalystInsight(BaseModel):
     bassin_emploi: str = Field(..., max_length=1000)
