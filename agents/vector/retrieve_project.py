@@ -1,5 +1,3 @@
-# project_graph.py corrigé
-
 from typing import Any, Dict
 from langgraph.graph import StateGraph, END
 from agents.vector.state_schema import GraphState
@@ -13,7 +11,6 @@ from agents.nodes.hr_agents.payroll_agent import PayrollAgent
 from agents.nodes.hr_agents.critique_rh_agent import CritiqueRHAgent
 from agents.nodes.hr_agents.validation_rh_agent import ValidationRHAgent
 from agents.nodes.hr_agents.final_rh_agent import FinalRHAgent
-from agents.nodes.hr_agents.meta_rh_agent import MetaAgent
 from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings
 from utils.json_utils import JSONRepairer
@@ -65,7 +62,6 @@ def create_project_graph() -> StateGraph:
             "onboarding": onboarding,
             "payroll": payroll
         }
-        meta_agent = MetaAgent(llm=llm, agents_map=agents_map)
 
     except Exception as e:
         logger.critical(f"Erreur d'initialisation des agents: {str(e)}")
@@ -79,7 +75,6 @@ def create_project_graph() -> StateGraph:
                 if needs_data:
                     if "data_analytics" in state:
                         data_analytics = state["data_analytics"]
-                        # Préparer les champs nécessaires explicitement pour recruiter
                         input_data["data"] = {
                             "competences_manquantes": data_analytics.get("competences_manquantes", []),
                             "localisation": data_analytics.get("localisation", "Non spécifiée"),
@@ -107,26 +102,7 @@ def create_project_graph() -> StateGraph:
 
         return node
 
-    def meta_agent_node(state: GraphState) -> Dict[str, Any]:
-        try:
-            logger.info("[meta_agent_node] Collecte réponses agents précédents")
-            agent_responses = {k: state[k] for k in agents_map.keys() if k in state}
-            updated_state = meta_agent.invoke({"state": agent_responses})
-            new_state = dict(state)
-            new_state.update(updated_state)
-
-            if "meta_agent_trace" not in new_state:
-                new_state["meta_agent_trace"] = []
-
-            new_state["meta_agent_trace"].append({
-                "timestamp": datetime.now().isoformat(),
-                "iteration": len(new_state["meta_agent_trace"]) + 1,
-                "updated_responses": updated_state
-            })
-            return new_state
-        except Exception as e:
-            logger.error(f"Erreur dans meta_agent_node: {str(e)}")
-            return {"meta_agent_error": str(e)}
+    # Suppression complète de meta_agent_node et de meta_agent
 
     def critique_node(state: GraphState) -> Dict[str, Any]:
         try:
@@ -159,7 +135,6 @@ def create_project_graph() -> StateGraph:
                 "validations": state.get("validation", {})
             })
 
-            # Si la réponse est une chaîne, on tente un parsing JSON sécurisé
             if isinstance(raw_final_result, str):
                 try:
                     final_result = json.loads(raw_final_result)
@@ -179,7 +154,6 @@ def create_project_graph() -> StateGraph:
                 json.dump({
                     "query": state.get("query", ""),
                     "agent_answers": agent_responses,
-                    "meta_agent_trace": state.get("meta_agent_trace", []),
                     "critique": state.get("critique", {}),
                     "validation": state.get("validation", {}),
                     "final_answer": final_result
@@ -201,7 +175,6 @@ def create_project_graph() -> StateGraph:
                 }
             }
 
-
     nodes_config = [
         ("dataanalyst", dataanalyst, "data_analytics", False),
         ("recruiter", recruiter, "recruiter", True),   # needs_data=True to get data_analytics in input
@@ -211,25 +184,23 @@ def create_project_graph() -> StateGraph:
         ("payroll", payroll, "payroll", False),
     ]
 
-    # Ajout des nœuds avec wrapper sécurisé
     for name, agent, key, needs_data in nodes_config:
         graph.add_node(name, safe_node_wrapper(agent, key, needs_data))
 
-    graph.add_node("meta_agent", meta_agent_node)
+    # Plus de meta_agent
+    # graph.add_node("meta_agent", meta_agent_node)
+
     graph.add_node("critique", critique_node)
     graph.add_node("validation", validation_node)
     graph.add_node("final", final_node)
 
-    # Point d'entrée
     graph.set_entry_point("dataanalyst")
 
-    # Construction des arcs (edges)
     main_nodes = ["recruiter", "rh", "talent", "onboarding", "payroll"]
     for node in main_nodes:
-        graph.add_edge("dataanalyst", node)  # tous partent de dataanalyst
-        graph.add_edge(node, "meta_agent")   # convergent vers meta_agent
+        graph.add_edge("dataanalyst", node)
+        graph.add_edge(node, "critique")  # lien direct vers critique
 
-    graph.add_edge("meta_agent", "critique")
     graph.add_edge("critique", "validation")
     graph.add_edge("validation", "final")
     graph.add_edge("final", END)
