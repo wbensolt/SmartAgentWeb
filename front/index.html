@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart RH Project Agent</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🧠 Smart RH Project Agent</h1>
+            <p>Entrez un projet pour analyser sa faisabilité par nos agents spécialisés.</p>
+        </header>
+
+        <div class="input-section">
+            <div class="input-container">
+                <textarea 
+                    id="projectInput" 
+                    placeholder="Ex : Peut-on construire une usine pour avions militaires à Toulouse dans 3 mois ?"
+                    rows="4"
+                ></textarea>
+                <button id="analyzeBtn" class="analyze-btn">
+                    <span class="btn-text">🔍 Investiguer</span>
+                    <div class="loading-spinner" style="display: none;"></div>
+                </button>
+            </div>
+        </div>
+
+        <div class="results-section" id="resultsSection" style="display: none;">
+            <div class="agents-grid" id="agentsGrid">
+                <!-- Agent cards will be populated here -->
+            </div>
+        </div>
+
+        <div class="error-message" id="errorMessage" style="display: none;"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

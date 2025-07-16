@@ -1,4 +1,5 @@
-from typing import TypedDict, Optional, List, Dict
+from typing import Optional, List, Dict
+from typing_extensions import TypedDict
 
 class GraphState(TypedDict, total=False):
     """Schéma d'état pour le graphe RH"""

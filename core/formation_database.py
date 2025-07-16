@@ -60,5 +60,5 @@ class FormationDatabase:
 
 # Exemple d'utilisation
 formation_db = FormationDatabase()
-print(formation_db.formations)
-print(formation_db.referentiels)
+#print(formation_db.formations)
+#print(formation_db.referentiels)
