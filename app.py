@@ -207,8 +207,17 @@ Il fournit une synthèse transversale de la viabilité du projet avec mise en pe
 # Interface Streamlit
 # --------------------
 
-st.set_page_config(page_title="Smart RH Project Agent", layout="wide")
-st.markdown("<h1 style='color:#2c2c2c;'>🧠 Smart RH Project Agent</h1>", unsafe_allow_html=True)
+# Configuration de la page avec un logo RH personnalisé
+st.set_page_config(
+    page_title="Smart RH Project Agent",
+    layout="wide",
+    page_icon="🧑‍💼"  # Icône RH dans l'onglet navigateur (peut aussi être une URL vers une image)
+)
+
+# Titre principal avec couleur jaune et texte en gras
+st.markdown("<h1 style='color:#FFA500; font-weight:bold;'>📊 Smart RH Project Agent</h1>", unsafe_allow_html=True)
+
+# Sous-titre
 st.markdown("**Entrez un projet pour analyser sa faisabilité par nos agents spécialisés.**")
 
 query = st.text_area(
