@@ -1,21 +1,33 @@
-from agents.nodes.hr_agents.dataanalysta_agent import DataAnalystAgent
-from agents.nodes.hr_agents.recruiter_agent import RecruiterAgent
-from agents.vector.retrieve_project import get_local_retriever
-from core.llm_providers import LLMManager
+from agents.nodes.hr_agents.recruiter_agent import recruit_candidates
+from agents.nodes.hr_agents.tools.data_analyst import analyse_data_analyst
+
+def test_analyse_data():
+    query = "Nous souhaitons lancer un projet RH à Toulouse avec un budget de 100000 euros et un délai de 3 mois."
+    result = analyse_data_analyst(query)
+    print("Résultat Data Analyst:")
+    print(result)
+
+def test_recruit_candidates():
+    query = "Recherche développeur Python avec expérience SQL à Lille"
+    data_analytics = {
+        "localisation": "Lille",
+        "capacites_disponibles": [
+            {"competence": "python", "effectif": 3},
+            {"competence": "sql", "effectif": 2},
+            {"competence": "java", "effectif": 10}
+        ],
+        "budget_utilisateur": 50000,
+        "delai_utilisateur_jours": 60,
+        "competences_manquantes": ["python", "sql"]
+    }
+    
+    #result = recruit_candidates(query, data=data_analytics)
+    result = recruit_candidates.invoke({"query": query, "data": data_analytics})
+    print(result)
+
+if __name__ == "__main__":
+    test_recruit_candidates()
 
 
-llm1 = LLMManager().get_llm()
-llm2 = LLMManager().get_llm()
-retriever = get_local_retriever()
-
-dataanalyst = DataAnalystAgent(retriever=retriever, llm=llm1)
-recruiter = RecruiterAgent(llm=llm2)
-
-input_query = {"query": "Projet industriel avec Python, SQL, gestion de budget 30000 euros, Toulouse"}
-
-res_data = dataanalyst.invoke(input_query)
-print("DataAnalyst Result:", res_data)
-
-input_recruiter = {"query": input_query["query"], "data": res_data}
-res_recruiter = recruiter.invoke(input_recruiter)
-print("Recruiter Result:", res_recruiter)
+"""if __name__ == "__main__":
+    test_analyse_data()"""

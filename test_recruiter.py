@@ -1,38 +1,35 @@
-from agents.nodes.hr_agents.recruiter_agent import RecruiterAgent
+import logging
+from agents.vector.state_schema import GraphState
+from agents.vector.retrieve_project import create_project_graph
 
+def test_recruiter_direct():
+    graph = create_project_graph()
+    compiled_graph = graph.compile()
 
-recruiter_agent = RecruiterAgent()
-
-result = recruiter_agent.invoke({
-    "query": "Peut-on construire une usine pour avion militaire à Toulouse dans 3 mois pour un budget de 30000 euros ?",
-    "data": {
-        "localisation": "Toulouse",
-        "budget_utilisateur": 30000,
-        "delai_utilisateur_jours": 90,
-        "competences_manquantes": [
-            "Aerospace Engineering",
-            "Project Management",
-            "Construction Management",
-            "Supply Chain Management",
-            "Logistics",
-            "Budgeting",
-            "Cost Estimation",
-            "Scheduling",
-            "Risk Management",
-            "Quality Control",
-            "Aviation Regulations Compliance",
-            "Site Management",
-            "Civil Engineering",
-            "Mechanical Engineering",
-            "Electrical Engineering",
-            "Industrial Automation",
-            "Security Clearance",
-            "Local Authority Liaison",
-            "Environmental Impact Assessment",
-            "Health and Safety Management"
+    test_query = "Nous recherchons un développeur backend à Lyon avec un budget de 4000 euros et un démarrage rapide."
+    fake_data_analytics = {
+        "bassin_emploi": "Lyon",
+        "disponibilite_profils": "Élevée",
+        "tendances_marche": ["Demande croissante de profils backend"],
+        "budget_moyen": 4500,
+        "delai_moyen_lancement_projet": 30,
+        "capacites_disponibles": [
+            {"competence": "Python", "effectif": 3},
+            {"competence": "Django", "effectif": 2}
         ],
-        "capacites_disponibles": []
+        "budget_utilisateur": 4000,
+        "delai_utilisateur_jours": 15,
+        "localisation": "Lyon",
+        "erreur": None
     }
-})
 
-print(result)
+    state = GraphState(query=test_query, data_analytics=fake_data_analytics)
+
+    recruiter_output = compiled_graph.invoke("recruiter", state)
+
+    print("\n=== Résultat de l'agent Recruiter ===")
+    print(recruiter_output.get("recruiter_output"))  # ✅ clé correcte
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    test_recruiter_direct()

@@ -2,8 +2,8 @@ from typing import Any, Dict
 from langgraph.graph import StateGraph, END
 from agents.vector.state_schema import GraphState
 from core.llm_providers import LLMManager
-from agents.nodes.hr_agents.dataanalysta_agent import DataAnalystAgent
-from agents.nodes.hr_agents.recruiter_agent import RecruiterAgent
+from agents.nodes.hr_agents.tools.data_analyst import analyse_data_analyst
+from agents.nodes.hr_agents.recruiter_agent import recruit_candidates  
 from agents.nodes.hr_agents.rhagent import RHAgent
 from agents.nodes.hr_agents.talentManagerrh import TalentManagerAgent
 from agents.nodes.hr_agents.onboarding_agent import OnboardingAgent
@@ -19,6 +19,9 @@ import logging
 import os
 import json
 import re
+
+from langchain.agents import initialize_agent, AgentType, Tool
+from langchain.memory import ConversationBufferMemory
 
 logger = logging.getLogger(__name__)
 CHROMA_PATH = "indexes/northwind_chroma"
@@ -45,8 +48,42 @@ def create_project_graph() -> StateGraph:
     try:
         llm = LLMManager().get_llm()
         retriever = get_local_retriever()
-        dataanalyst = DataAnalystAgent(retriever=retriever, llm=llm)
-        recruiter = RecruiterAgent(llm=llm)
+
+        # --- Tools ---
+        tools = [
+            Tool.from_function(
+                func=analyse_data_analyst,
+                name="AnalyseRH",
+                description="Analyse les besoins RH de l'entreprise"
+            ),
+            Tool.from_function(
+                func=recruit_candidates,
+                name="Recruiter",
+                description="Recherche des profils candidats selon la requête et données RH"
+            )
+        ]
+
+        # --- Memoires ---
+        memory_dataanalyst = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+        memory_recruiter = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+
+        # --- Agents LangChain ---
+        dataanalyst = initialize_agent(
+            tools=[tools[0]],  # uniquement analyse_data_analyst
+            llm=llm,
+            agent=AgentType.OPENAI_FUNCTIONS,
+            memory=memory_dataanalyst,
+            verbose=True
+        )
+
+        recruiter_agent = initialize_agent(
+            tools=[tools[1]],  # uniquement recruit_candidates
+            llm=llm,
+            agent=AgentType.OPENAI_FUNCTIONS,
+            memory=memory_recruiter,
+            verbose=True
+        )
+
         rh = RHAgent(llm=llm)
         talent = TalentManagerAgent(llm=llm)
         onboarding = OnboardingAgent(llm=llm)
@@ -54,9 +91,10 @@ def create_project_graph() -> StateGraph:
         critique = CritiqueRHAgent(llm=llm)
         validation = ValidationRHAgent(llm=llm)
         final = FinalRHAgent(llm=llm)
+
         agents_map = {
             "data_analytics": dataanalyst,
-            "recruiter": recruiter,
+            "recruiter": recruiter_agent,
             "rh": rh,
             "talent": talent,
             "onboarding": onboarding,
@@ -67,24 +105,15 @@ def create_project_graph() -> StateGraph:
         logger.critical(f"Erreur d'initialisation des agents: {str(e)}")
         raise
 
+    # Wrapper générique pour la plupart des agents
     def safe_node_wrapper(agent, key: str, needs_data: bool = False):
         def node(state: GraphState) -> Dict[str, Any]:
             logger.info(f"[{key}] Etat reçu avec clés : {list(state.keys())}")
             try:
-                input_data = {"query": state.get("query", "")}
-                if needs_data:
-                    if "data_analytics" in state:
-                        data_analytics = state["data_analytics"]
-                        input_data["data"] = {
-                            "competences_manquantes": data_analytics.get("competences_manquantes", []),
-                            "localisation": data_analytics.get("localisation", "Non spécifiée"),
-                            "budget_utilisateur": data_analytics.get("budget_utilisateur", 0),
-                            "delai_utilisateur_jours": data_analytics.get("delai_utilisateur_jours", 0),
-                            "capacites_disponibles": data_analytics.get("capacites_disponibles", []),
-                        }
-                        logger.info(f"[{key}] Passage data_analytics à l'agent avec clés : {list(input_data['data'].keys())}")
-                    else:
-                        logger.warning(f"[{key}] data_analytics absent du state, passage sans data")
+                input_data = {"input": state.get("query", "")}
+
+                if needs_data and "data_analytics" in state:
+                    input_data["input"] += f"\n\nInfos RH:\n{json.dumps(state['data_analytics'], ensure_ascii=False)}"
 
                 raw_result = agent.invoke(input_data)
 
@@ -99,10 +128,49 @@ def create_project_graph() -> StateGraph:
             except Exception as e:
                 logger.error(f"Erreur dans le nœud {key}: {str(e)}")
                 return {key: {"error": str(e), "status": "failed"}}
-
         return node
 
-    # Suppression complète de meta_agent_node et de meta_agent
+    # Wrapper spécifique pour recruiter qui appelle dataanalyst si data manquantes
+    def safe_recruiter_node_wrapper(recruiter_agent, dataanalyst_agent, key: str):
+        def node(state: GraphState) -> Dict[str, Any]:
+            logger.info(f"[{key}] Etat reçu avec clés : {list(state.keys())}")
+            try:
+                query = state.get("query", "")
+                data_analytics = state.get("data_analytics", {})
+
+                # Si pas ou peu de data analytics, appel de dataanalyst
+                if not data_analytics or len(data_analytics) == 0:
+                    logger.info(f"[{key}] Pas de données analytiques, appel de dataanalyst...")
+                    da_result = dataanalyst_agent.invoke({"input": query})
+                    if isinstance(da_result, str):
+                        da_result = JSONRepairer.safe_parse(clean_json_response(da_result))
+                    # On récupère les données analytiques selon structure renvoyée
+                    if da_result and "data_analytics" in da_result:
+                        data_analytics = da_result["data_analytics"]
+                    else:
+                        data_analytics = da_result or {}
+
+                # Appeler ensuite recruiter avec données mises à jour
+                input_data = {
+                    "input": query,
+                    "data": data_analytics
+                }
+
+                raw_result = recruiter_agent.invoke(input_data)
+
+                if isinstance(raw_result, str):
+                    cleaned = clean_json_response(raw_result)
+                    result = JSONRepairer.safe_parse(cleaned)
+                else:
+                    result = raw_result
+
+                logger.info(f"[{key}] Résultat recruiter (trunc): {str(result)[:300]}")
+                return {key: result}
+
+            except Exception as e:
+                logger.error(f"Erreur dans le nœud {key}: {str(e)}")
+                return {key: {"error": str(e), "status": "failed"}}
+        return node
 
     def critique_node(state: GraphState) -> Dict[str, Any]:
         try:
@@ -175,9 +243,10 @@ def create_project_graph() -> StateGraph:
                 }
             }
 
+    # Ajout des nœuds à la graph
     nodes_config = [
         ("dataanalyst", dataanalyst, "data_analytics", False),
-        ("recruiter", recruiter, "recruiter", True),   # needs_data=True to get data_analytics in input
+        ("recruiter", recruiter_agent, "recruiter", True),  # ici, tool LangChain recruiter
         ("rh", rh, "rh", True),
         ("talent", talent, "talent", False),
         ("onboarding", onboarding, "onboarding", False),
@@ -185,10 +254,10 @@ def create_project_graph() -> StateGraph:
     ]
 
     for name, agent, key, needs_data in nodes_config:
-        graph.add_node(name, safe_node_wrapper(agent, key, needs_data))
-
-    # Plus de meta_agent
-    # graph.add_node("meta_agent", meta_agent_node)
+        if name == "recruiter":
+            graph.add_node(name, safe_recruiter_node_wrapper(agent, dataanalyst, key))
+        else:
+            graph.add_node(name, safe_node_wrapper(agent, key, needs_data))
 
     graph.add_node("critique", critique_node)
     graph.add_node("validation", validation_node)
@@ -199,7 +268,7 @@ def create_project_graph() -> StateGraph:
     main_nodes = ["recruiter", "rh", "talent", "onboarding", "payroll"]
     for node in main_nodes:
         graph.add_edge("dataanalyst", node)
-        graph.add_edge(node, "critique")  # lien direct vers critique
+        graph.add_edge(node, "critique")
 
     graph.add_edge("critique", "validation")
     graph.add_edge("validation", "final")

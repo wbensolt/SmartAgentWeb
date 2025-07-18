@@ -1,15 +1,14 @@
-from typing import Optional, List, Dict
-from typing_extensions import TypedDict
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel
 
-class GraphState(TypedDict, total=False):
-    """Schéma d'état pour le graphe RH"""
-    query: str
-    data_analytics: Optional[Dict]
-    recruiter: Optional[List[Dict]]
-    rh: Optional[str]
-    talent: Optional[Dict]
-    onboarding: Optional[Dict]
-    payroll: Optional[Dict]
-    critique: Optional[str]
-    validation: Optional[Dict]
-    final_answer: Optional[Dict]
+class GraphState(BaseModel):
+    query: Optional[str] = None
+    data_analytics: Optional[Dict[str, Any]] = None
+    recruiter: Optional[List[Dict[str, Any]]] = None
+    rh: Optional[str] = None
+    talent: Optional[Dict[str, Any]] = None
+    onboarding: Optional[Dict[str, Any]] = None
+    payroll: Optional[Dict[str, Any]] = None
+    critique: Optional[str] = None
+    validation: Optional[Dict[str, Any]] = None
+    final_answer: Optional[Dict[str, Any]] = None

@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import List, Mapping, Optional, Dict, Any
+
 from langchain_groq import ChatGroq
 from langchain.schema import AIMessage
-from langchain.llms.base import LLM
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.messages import AIMessage
+
 from pydantic import PrivateAttr
-import logging
-from langchain_core.runnables import Runnable  # Assure-toi que ce chemin est correct
 
 try:
     from langchain_ollama import OllamaLLM
@@ -15,9 +17,10 @@ except ImportError:
 from utils.config import get_config, reset_config
 
 
+# ---- Interfaces & Providers ----
+
 class LLMProvider(ABC):
     """Interface abstraite pour les providers LLM"""
-
     @abstractmethod
     def invoke(self, prompt: str) -> str:
         pass
@@ -48,7 +51,7 @@ class OllamaProvider(LLMProvider):
 
 
 class GroqProvider(LLMProvider):
-    def __init__(self, api_key: str, model: str = "meta-llama/llama-4-scout-17b-16e-instruct", temperature: float = 0.7):#"meta-llama/llama-4-scout-17b-16e-instruct"llama3-70b-8192
+    def __init__(self, api_key: str, model: str = "meta-llama/llama-4-scout-17b-16e-instruct", temperature: float = 0.7):
         self.api_key = api_key
         self.model_name = model
         self.temperature = temperature
@@ -71,32 +74,56 @@ class GroqProvider(LLMProvider):
         }
 
 
-class GroqRunnableAdapter(Runnable):
-    def __init__(self, groq_provider):
-        self.groq_provider = groq_provider
-        self.logger = logging.getLogger(__name__)
+# ---- LangChain Wrapper compatible avec Agent LangChain ----
 
-    def invoke(self, input: Any, config: Optional[Dict[str, Any]] = None) -> str:
-        try:
-            if hasattr(input, "to_string"):
-                prompt = input.to_string()
-            else:
-                prompt = str(input)
-            raw_response = self.groq_provider.invoke(prompt)
-            return raw_response
-        except Exception as e:
-            self.logger.error(f"Erreur GroqRunnableAdapter: {str(e)}")
-            return f"Erreur interne: {str(e)}"
+class LangChainChatWrapper(BaseChatModel):
+    _provider = PrivateAttr()
+    
+    def __init__(self, provider, verbose: bool = False, **kwargs):
+        super().__init__(**kwargs)
+        self._provider = provider
+        self._verbose = verbose
 
-    async def ainvoke(self, input: Any, config: Optional[Dict[str, Any]] = None) -> str:
-        return self.invoke(input, config)
+    def _generate(
+        self,
+        messages: List[Any],
+        stop: Optional[List[str]] = None,
+        functions: Optional[List[Dict[str, Any]]] = None,
+        **kwargs
+    ) -> ChatResult:
+        prompt = "\n".join(m.content for m in messages if hasattr(m, "content"))
+
+        if self._verbose:
+            print("=== Prompt envoyé au LLM ===")
+            print(prompt)
+            print("============================")
+
+        response = self._provider.invoke(prompt)
+
+        if self._verbose:
+            print("=== Réponse reçue du LLM ===")
+            print(response)
+            print("============================")
+
+        return ChatResult(
+            generations=[ChatGeneration(message=AIMessage(content=response))]
+        )
+
+    @property
+    def _identifying_params(self) -> Dict[str, Any]:
+        return self._provider.get_model_info()
+
+    @property
+    def _llm_type(self) -> str:
+        return "wrapped_chat_llm"
 
 
-
+# Manager LLM centralisé avec verbose optionnel
 class LLMManager:
     def __init__(self):
         reset_config()
         self.config = get_config()
+
         if self.config.llm_provider == "groq":
             self.provider = GroqProvider(
                 api_key=self.config.groq_api_key,
@@ -109,37 +136,11 @@ class LLMManager:
                 temperature=self.config.temperature
             )
 
-    def get_llm(self) -> Runnable:
-        # Si c’est GroqProvider, on renvoie l’adaptateur Runnable
-        if isinstance(self.provider, GroqProvider):
-            return GroqRunnableAdapter(self.provider)
-        # OllamaProvider est supposé être compatible Runnable, sinon créer un adapter similaire
-        return self.provider
-
-    def set_provider(self, provider: LLMProvider):
-        self.provider = provider
+    def get_llm(self, verbose: bool = False) -> BaseChatModel:
+        return LangChainChatWrapper(self.provider, verbose=verbose)
 
     def invoke(self, prompt: str) -> str:
         return self.provider.invoke(prompt)
 
     def get_model_info(self) -> Dict[str, Any]:
         return self.provider.get_model_info()
-
-
-class LangChainLLMWrapper(LLM):
-    _provider: LLMProvider = PrivateAttr()
-
-    def __init__(self, provider: LLMProvider, **kwargs):
-        super().__init__(**kwargs)
-        self._provider = provider
-
-    def _call(self, prompt: str, stop: Optional[List[str]] = None) -> str:
-        return self._provider.invoke(prompt)
-
-    @property
-    def _identifying_params(self) -> Mapping[str, Any]:
-        return {"provider": self._provider.get_model_info()}
-
-    @property
-    def _llm_type(self) -> str:
-        return "wrapped_llm"
