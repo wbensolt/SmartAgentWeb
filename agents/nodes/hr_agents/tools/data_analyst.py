@@ -6,7 +6,7 @@ import sqlite3
 import unicodedata
 import string
 from typing import Any, Dict
-import regex  # <--- utiliser regex au lieu de re pour la récursion
+import regex  # regex récursif pour JSON
 
 from langchain_chroma import Chroma
 from langchain_core.tools import tool
@@ -16,11 +16,13 @@ from langchain_ollama import OllamaEmbeddings
 
 from core.llm_providers import LLMManager
 
-# 📦 Mémoire simple
+# 📦 Mémoire
 memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
+logging.basicConfig(level=logging.INFO)
 CHROMA_PATH = "indexes/northwind_chroma"
 logger = logging.getLogger(__name__)
+
 
 def get_local_retriever():
     try:
@@ -29,7 +31,7 @@ def get_local_retriever():
     except Exception as e:
         logger.error(f"Erreur d'initialisation du retriever: {str(e)}")
         raise
-    
+
 retriever = get_local_retriever()
 
 def extraire_contexte_societe(sqlite_path: str) -> Dict[str, Any]:
@@ -101,12 +103,14 @@ def analyse_data_analyst(query: str) -> dict:
     """
     Analyse un prompt projet et retourne les insights RH liés à la faisabilité.
     """
+    logger.info("[DataAnalyst] Analyse du prompt projet lancé.")
+    logger.info("[DataAnalyst] Prompt reçu : %s", query)
+
     llm = LLMManager().get_llm(verbose=True)
     context_docs = retriever.invoke(query)
     context = "\n".join([d.page_content for d in context_docs[:3]])
 
     societe = extraire_contexte_societe("data/northwind_company.db")
-
     localisation = extraire_localisation(query)
     budget_delai = extraire_budget_delai(query)
     budget_user_val = budget_delai["budget"] or 0
@@ -138,27 +142,31 @@ Analyse le projet et retourne un JSON :
   "localisation": "{localisation}",
   "erreur": null
 }}
-    """.strip()
+""".strip()
 
-    response = llm.invoke(prompt)
+    logger.info("[DataAnalyst] Prompt complet envoyé au LLM :\n%s", prompt)
 
     try:
-        # Récupérer le texte brut selon le type de retour
+        response = llm.invoke(prompt)
+
         if hasattr(response, "content"):
             text_response = response.content
         else:
             text_response = str(response)
 
-        # Extraction robuste du JSON imbriqué avec regex récursive
+        logger.info("[DataAnalyst] Réponse brute du LLM : %s", text_response)
+
         json_match = regex.search(r"\{(?:[^{}]|(?R))*\}", text_response)
         if json_match:
             json_str = json_match.group(0)
-            return json.loads(json_str)
+            resultat = json.loads(json_str)
+            logger.info("[DataAnalyst] JSON parsé : %s", resultat)
+            return resultat
         else:
-            raise ValueError("Aucun JSON trouvé dans la réponse")
+            raise ValueError("Aucun JSON détecté dans la réponse.")
 
     except Exception as e:
-        logger.error(f"Erreur parsing JSON ou LLM : {e}", exc_info=True)
+        logger.error("[DataAnalyst] Erreur parsing JSON ou LLM : %s", str(e), exc_info=True)
         return {
             "erreur": f"Erreur parsing ou LLM : {str(e)}",
             "budget_utilisateur": budget_user_val,

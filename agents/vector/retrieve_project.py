@@ -138,17 +138,23 @@ def create_project_graph() -> StateGraph:
                 query = state.get("query", "")
                 data_analytics = state.get("data_analytics", {})
 
-                # Si pas ou peu de data analytics, appel de dataanalyst
                 if not data_analytics or len(data_analytics) == 0:
-                    logger.info(f"[{key}] Pas de données analytiques, appel de dataanalyst...")
+                    logger.info(f"[{key}] 🚀 Appel de l'agent Data Analyst avec query : {query}")
                     da_result = dataanalyst_agent.invoke({"input": query})
+                    logger.info(f"[{key}] ✅ Résultat brut de Data Analyst : {da_result}")
+
                     if isinstance(da_result, str):
-                        da_result = JSONRepairer.safe_parse(clean_json_response(da_result))
-                    # On récupère les données analytiques selon structure renvoyée
+                        cleaned = clean_json_response(da_result)
+                        logger.info(f"[{key}] 🧹 Résultat nettoyé de Data Analyst : {cleaned}")
+                        da_result = JSONRepairer.safe_parse(cleaned)
+
                     if da_result and "data_analytics" in da_result:
                         data_analytics = da_result["data_analytics"]
                     else:
                         data_analytics = da_result or {}
+                    
+                    logger.info(f"[{key}] 📊 Données analytiques récupérées : {json.dumps(data_analytics, ensure_ascii=False, indent=2)}")
+
 
                 # Appeler ensuite recruiter avec données mises à jour
                 input_data = {

@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 import logging
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class ProfilCandidat(BaseModel):
@@ -27,7 +28,19 @@ def recruit_candidates(query: str, data: Optional[Dict[str, Any]] = None) -> Dic
         Dict[str, Any]: Résultat contenant les profils candidats et métadonnées.
     """
     try:
+        from tools.data_analyst import analyse_data_analyst  # 👈 Import dynamique ici
+
         data_analytics = data or {}
+
+        if not data_analytics:
+            logger.info("[recruiter] Pas de données analytiques, appel de dataanalyst...")
+            logger.info("[recruiter] Appel agent Data Analyst avec input : %s", query)
+            try:
+                data_analytics = analyse_data_analyst(query)
+                logger.info("[recruiter] Résultat agent Data Analyst : %s", data_analytics)
+            except Exception as e:
+                logger.error("[recruiter] Échec appel Data Analyst : %s", str(e), exc_info=True)
+                data_analytics = {}
 
         if not query or len(query) > 500:
             raise ValueError("Requête invalide (vide ou >500 caractères)")
