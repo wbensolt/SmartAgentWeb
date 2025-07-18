@@ -4,8 +4,8 @@ import sys
 import json
 import re
 from agents.vector.retrieve_project import create_project_graph
-from agents.vector.retrieve import create_dynamic_rh_graph, ensure_index
-from core.llm_providers import LLMManager
+#from agents.vector.retrieve import create_dynamic_rh_graph, ensure_index
+"""from core.llm_providers import LLMManager
 from agents.nodes.hr_agents.dataanalysta_agent import DataAnalystAgent
 from agents.nodes.hr_agents.recruiter_agent import RecruiterAgent
 from agents.nodes.hr_agents.rhagent import RHAgent
@@ -17,7 +17,7 @@ from agents.nodes.hr_agents.validation_rh_agent import ValidationRHAgent
 from agents.nodes.hr_agents.final_rh_agent import FinalRHAgent
 from agents.vector.state_schema import GraphState
 from langchain_chroma import Chroma
-from langchain_ollama import OllamaEmbeddings
+from langchain_ollama import OllamaEmbeddings"""
 
 
 def clean_response(text):
@@ -60,7 +60,7 @@ def run_smart_agent():
         print("=================================\n")
 
 
-def run_rh_agent():
+"""def run_rh_agent():
     print("👔 Préparation du Retriever RH dynamique...")
     ensure_index()
     graph = create_dynamic_rh_graph().compile()
@@ -128,15 +128,15 @@ def run_single_agent():
             print(result)
 
     except Exception as e:
-        print(f"❌ Erreur : {str(e)}")
+        print(f"❌ Erreur : {str(e)}")"""
 
 
 if __name__ == "__main__":
     mode = sys.argv[1].lower() if len(sys.argv) > 1 else "project"
 
     if mode == "rh":
-        run_rh_agent()
+        pass#run_rh_agent()
     elif mode == "test":
-        run_single_agent()
+        pass#run_single_agent()
     else:
         run_smart_agent()

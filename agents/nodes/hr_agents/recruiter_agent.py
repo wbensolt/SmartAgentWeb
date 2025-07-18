@@ -20,13 +20,46 @@ class ProfilCandidat(BaseModel):
 @tool
 def recruit_candidates(query: str, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
-    Recherche des profils candidats en fonction de la requête et des données analytiques optionnelles.
+    Recherche et filtre des profils candidats adaptés à un besoin de recrutement donné.
+
+    La fonction analyse une requête textuelle décrivant le besoin en recrutement,
+    enrichie éventuellement par des données analytiques (ex. issues d'un agent Data Analyst),
+    pour extraire les compétences clés, la localisation, le budget, et autres critères.
+
+    Elle exclut les compétences internes largement disponibles (pour éviter de recruter des profils
+    déjà présents), recherche localement des CV correspondant aux critères restants, 
+    puis classe et filtre les profils selon un score basé sur compétences, disponibilité et niveau.
+
     Args:
-        query (str): Description du besoin en recrutement.
-        data (Optional[Dict]): Données analytiques (issue par exemple d'un autre agent Data Analyst).
+        query (str): Description textuelle du besoin en recrutement (max 500 caractères).
+        data (Optional[Dict[str, Any]]): Données analytiques optionnelles
+            (ex. localisation, budget, compétences disponibles/manquantes).
+
     Returns:
-        Dict[str, Any]: Résultat contenant les profils candidats et métadonnées.
+        Dict[str, Any]: Résultat contenant :
+            - "status": "success" ou "error"
+            - "profils": liste des profils candidats (anonymisés, avec compétences, localisation, etc.)
+            - "count": nombre de profils retournés
+            - "competences_evitees": compétences internes exclues de la recherche
+            - "competences_recherchees_initiales": compétences extraites initialement
+            - "competences_recherchees_finales": compétences retenues après exclusion
+            - "competences_non_trouvees": compétences recherchées non couvertes par les profils trouvés
+            - "localisation_projet": localisation ciblée pour la recherche
+            - "budget_utilisateur": budget disponible estimé
+            - "delai_utilisateur_jours": délai en jours estimé
+            - "distance_max_km": distance maximale pour localisation des candidats
+            - "resume_global": résumé synthétique du résultat
+            - "message": message utilisateur contextualisé (ex. absence de profils)
+
+    Raises:
+        ValueError: Si la requête est vide ou dépasse 500 caractères.
+
+    Notes:
+        - Les profils sont triés selon un score prenant en compte les compétences,
+          la disponibilité et le niveau d'expérience.
+        - En cas d'absence de données analytiques, la fonction appelle l'agent Data Analyst pour les obtenir.
     """
+    logger.info("[recruit_candidates] Analyse du prompt projet lancé.")
     try:
         from tools.data_analyst import analyse_data_analyst  # 👈 Import dynamique ici
 

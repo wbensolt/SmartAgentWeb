@@ -1,28 +1,64 @@
-from typing import Any, Dict
-from langchain_core.runnables import Runnable
-from agents.nodes.hr_agents.schema import RHResponse
+from langchain_core.tools import tool
 from core.llm_providers import LLMManager
-from pydantic import BaseModel
-import json
-import logging
-import re
-from langchain.output_parsers import PydanticOutputParser, OutputFixingParser
+from agents.nodes.hr_agents.schema import RHResponse
 from utils.code_travail_loader import CodeTravailLoader
+from langchain.output_parsers import PydanticOutputParser, OutputFixingParser
+
+from typing import Dict, Any
+import logging
+import json
+import re
 
 logger = logging.getLogger(__name__)
 
-class RHAgent(Runnable):
-    def __init__(self, llm=None):
-        self.llm = llm or LLMManager().get_llm()
-        self.parser = PydanticOutputParser(pydantic_object=RHResponse)
-        self.fixing_parser = OutputFixingParser.from_llm(parser=self.parser, llm=self.llm)
-        self.max_input_length = 2000
-        self.max_output_length = 5000
-        self.code_loader = CodeTravailLoader("data/code_du_travail.json")
+@tool
+def check_labor_law(input: str) -> Dict[str, Any]:
+    """
+    Vérifie la conformité d'un projet RH avec le droit du travail français.
 
-        self.system_prompt = """[SYSTEM]
+    Cette fonction prend en entrée une chaîne JSON contenant une requête textuelle décrivant un projet RH
+    ainsi que des données contextuelles internes (budget, délais, compétences, etc.). Elle utilise un modèle
+    de langage pour analyser la conformité du projet aux règles du Code du travail et retourne un JSON
+    structuré avec une réponse claire, les références légales pertinentes et un statut de conformité.
+
+    Args:
+        input (str): Chaîne JSON contenant au moins les clés suivantes :
+            - "query" (str) : description du projet RH à analyser.
+            - "data" (dict, optionnel) : données internes sur le projet (budget, délais, compétences).
+
+    Returns:
+        Dict[str, Any]: Dictionnaire JSON conforme au schéma RHResponse avec les champs :
+            - "response" (str) : synthèse actionnable sur la conformité.
+            - "legal_references" (dict) : références aux articles du Code du travail et conventions collectives.
+            - "compliance_status" (str) : statut ("conforme", "à_verifier", "non_conforme").
+            - Eventuellement champs d'erreur si problème d'analyse.
+
+    Raises:
+        ValueError: si la requête est vide.
+
+    Notes:
+        - La réponse est strictement un bloc JSON sans texte additionnel.
+        - Les références légales sont limitées aux extraits pertinents extraits via mots-clés.
+        - En cas d'erreur, un objet avec statut "non_conforme" et message d'erreur est retourné.
+    """
+    logger.info("[check_labor_law] Analyse du prompt projet lancé.")
+    try:
+        params = json.loads(input)
+        query = params.get("query", "")
+        data = params.get("data", {})
+
+        if not query:
+            raise ValueError("Requête vide.")
+
+        llm = LLMManager().get_llm()
+        parser = PydanticOutputParser(pydantic_object=RHResponse)
+        fixing_parser = OutputFixingParser.from_llm(parser=parser, llm=llm)
+        max_input_length = 2000
+        max_output_length = 5000
+        code_loader = CodeTravailLoader("data/code_du_travail.json")
+
+        system_prompt = """[SYSTEM]
 Tu es un expert en droit du travail français. Ta tâche est de vérifier si le projet décrit respecte le droit du travail.
-
 Tu DOIS répondre uniquement avec un **bloc JSON** VALIDE (aucun texte autour), comme ceci :
 ```json
 {
@@ -34,127 +70,81 @@ Tu DOIS répondre uniquement avec un **bloc JSON** VALIDE (aucun texte autour), 
 "compliance_status": "conforme|à_verifier|non_conforme"
 }
 Utilise uniquement les articles fournis dans la section [EXTRAITS CODE DU TRAVAIL].
-
 Si aucun article n’est pertinent, indique "code_du_travail": [] explicitement.
-
 Prends en compte le budget, les délais, les effectifs, et les compétences internes.
-
 Ne rajoute aucune explication ni texte en dehors du bloc markdown JSON."""
 
-    def _truncate_input(self, text: str) -> str:
-        return text[:self.max_input_length]
+        question = query.strip()[:max_input_length]
+        keywords = question.lower().split()
+        articles = code_loader.search_by_keywords(keywords, max_results=3)
 
-    def _clean_response(self, response: str) -> str:
-        match = re.search(r"```json(.*?)```", response, re.DOTALL | re.IGNORECASE)
-        if match:
-            return match.group(1).strip()
-        return response.strip().replace("‘", "'").replace("’", "'").replace("“", '"').replace("”", '"')
+        extrait_code = (
+            "\n\n".join(f"Article {a['id']} - {a['title']}:\n{a['content'][:500]}..." for a in articles)
+            if articles else "Aucun article pertinent trouvé."
+        )
+        articles_ids = [a["id"] for a in articles] if articles else []
 
-    def invoke(self, input: Dict[str, Any]) -> Dict[str, Any]:
-        try:
-            question = self._truncate_input(str(input.get("query", "")))
-            print(f"🟡 Étape 1 : Requête utilisateur : {question}")
-            if not question.strip():
-                raise ValueError("Question vide")
+        budget_moyen = data.get("budget_moyen", "inconnu")
+        delai_moyen = data.get("delai_moyen_lancement_projet", "inconnu")
+        competences = data.get("capacites_disponibles", [])
+        competences_str = ", ".join(c.get("competence", "") for c in competences)
 
-            # Recherche d'articles
-            keywords = question.lower().split()
-            articles = self.code_loader.search_by_keywords(keywords, max_results=3)
+        contexte = {
+            "entreprise": {
+                "budget_moyen": budget_moyen,
+                "delai_moyen_lancement_projet": delai_moyen,
+                "competences_internes": competences_str
+            },
+            "contexte_externe": data.get("context", {})
+        }
+        contexte_json = json.dumps(contexte, ensure_ascii=False)[:1000]
 
-            if articles:
-                print(f"🟡 Étape 2 : Articles trouvés : {[a['id'] for a in articles]}")
-                extrait_code = "\n\n".join(
-                    f"Article {a['id']} - {a['title']}:\n{a['content'][:500]}..."
-                    for a in articles
-                )
-                articles_ids = [a['id'] for a in articles]
-            else:
-                print("🟡 Étape 2 : Aucun article pertinent trouvé.")
-                extrait_code = "Aucun article pertinent trouvé."
-                articles_ids = []
+        prompt = (
+            f"{system_prompt}\n\n"
+            f"[QUESTION]\n{question}\n\n"
+            f"[CONTEXTE INTERNE]\n{contexte_json}\n\n"
+            f"[EXTRAITS CODE DU TRAVAIL]\n{extrait_code}\n\n"
+            f"[EXIGENCES]\n"
+            f"- Vérifie si le projet respecte les obligations légales.\n"
+            f"- Signale si le budget ou le temps est insuffisant pour respecter la loi.\n"
+            f"- Donne une réponse claire et juridiquement exploitable.\n"
+            f"- Maximum {max_output_length} caractères."
+        )
 
-            # Contexte entreprise
-            state = input.get("state", {})
-            data_analytics = state.get("data_analytics", {})
-            budget_moyen = data_analytics.get("budget_moyen", "inconnu")
-            delai_moyen = data_analytics.get("delai_moyen_lancement_projet", "inconnu")
-            competences = data_analytics.get("capacites_disponibles", [])
-            competences_str = ", ".join(c.get("competence", "") for c in competences)
+        raw_response = llm.invoke(prompt)
+        # Correction ici : extraire le texte si raw_response est un AIMessage
+        raw_response = getattr(raw_response, "content", raw_response)
 
-            contexte = {
-                "entreprise": {
-                    "budget_moyen": budget_moyen,
-                    "delai_moyen_lancement_projet": delai_moyen,
-                    "competences_internes": competences_str
-                },
-                "contexte_externe": input.get("context", {})
-            }
-            contexte_json = json.dumps(contexte, ensure_ascii=False)[:1000]
+        def clean_json_response(text: str) -> str:
+            match = re.search(r"```json(.*?)```", text, re.DOTALL | re.IGNORECASE)
+            if match:
+                return match.group(1).strip()
+            return text.strip()
 
-            print("🟡 Étape 3 : Préparation du prompt pour le LLM...")
-            prompt = (
-                f"{self.system_prompt}\n\n"
-                f"[QUESTION]\n{question}\n\n"
-                f"[CONTEXTE INTERNE]\n{contexte_json}\n\n"
-                f"[EXTRAITS CODE DU TRAVAIL]\n{extrait_code}\n\n"
-                f"[EXIGENCES]\n"
-                f"- Vérifie si le projet respecte les obligations légales.\n"
-                f"- Signale si le budget ou le temps est insuffisant pour respecter la loi.\n"
-                f"- Donne une réponse claire et juridiquement exploitable.\n"
-                f"- Maximum {self.max_output_length} caractères."
-            )
+        cleaned = clean_json_response(raw_response)
+        json_obj = json.loads(cleaned)
 
-            raw_response = self.llm.invoke(prompt)
-            print("🟢 Étape 4 : Réponse brute reçue du LLM")
+        # Correction références légales
+        legal_refs = json_obj.get("legal_references", {})
+        if not isinstance(legal_refs, dict):
+            json_obj["legal_references"] = {"code_du_travail": [], "convention_collective": ""}
+        if legal_refs.get("code_du_travail") is None:
+            json_obj["legal_references"]["code_du_travail"] = []
+        if legal_refs.get("convention_collective") is None:
+            json_obj["legal_references"]["convention_collective"] = ""
 
-            cleaned_response = self._clean_response(raw_response)
-            print(f"\n🧩 JSON nettoyé avant parsing :\n{cleaned_response}")
+        result = fixing_parser.parse(json.dumps(json_obj)).dict()
+        result["legal_references"]["code_du_travail"] = articles_ids
 
-            # 🔧 Correction JSON si nécessaire
-            try:
-                json_obj = json.loads(cleaned_response)
+        return result
 
-                # Si legal_references n'est pas un dictionnaire, on force un format correct
-                if not isinstance(json_obj.get("legal_references"), dict):
-                    json_obj["legal_references"] = {
-                        "code_du_travail": [],
-                        "convention_collective": ""
-                    }
-
-                if isinstance(json_obj["legal_references"].get("code_du_travail"), dict):
-                    json_obj["legal_references"]["code_du_travail"] = list(json_obj["legal_references"]["code_du_travail"].keys())
-                elif json_obj["legal_references"].get("code_du_travail") is None:
-                    json_obj["legal_references"]["code_du_travail"] = []
-
-                # Correction : convention_collective = None -> ""
-                if json_obj["legal_references"].get("convention_collective") is None:
-                    json_obj["legal_references"]["convention_collective"] = ""
-
-                cleaned_response = json.dumps(json_obj)
-
-            except Exception as fix_err:
-                print(f"⚠️ Erreur correction JSON RHAgent : {fix_err}")
-
-
-            parsed = self.fixing_parser.parse(cleaned_response)
-            print("✅ Étape 5 : Résultat final prêt.")
-            result = parsed.dict()
-
-            if "legal_references" in result:
-                result["legal_references"]["code_du_travail"] = articles_ids
-
-            return result
-
-        except Exception as e:
-            print(f"❌ Erreur RHAgent: {str(e)}")
-            fallback = RHResponse(
-                response=f"Erreur: {str(e)[:200]}",
-                legal_references={},
-                compliance_status="non_conforme",
-                error=True,
-                error_details=str(e)
-            )
-            return fallback.dict()
-
-    async def ainvoke(self, input: Dict[str, Any]) -> Dict[str, Any]:
-        return self.invoke(input)
+    except Exception as e:
+        logger.error(f"[check_labor_law] Erreur RHAgent : {str(e)}", exc_info=True)
+        fallback = RHResponse(
+            response=f"Erreur: {str(e)[:200]}",
+            legal_references={},
+            compliance_status="non_conforme",
+            error=True,
+            error_details=str(e)
+        )
+        return fallback.dict()

@@ -1,37 +1,60 @@
-from typing import Dict, Any
-from langchain_core.runnables import Runnable
+from langchain_core.tools import tool
 from langchain.output_parsers import PydanticOutputParser, OutputFixingParser
 from core.llm_providers import LLMManager
 from agents.nodes.hr_agents.schema import FinalRHPlan
+from typing import Dict, Any
 import logging
 import json
 
-class FinalRHAgent(Runnable):
-    def __init__(self, llm=None):
-        self.llm = llm or LLMManager().get_llm()
-        self.parser = PydanticOutputParser(pydantic_object=FinalRHPlan)
-        self.fixing_parser = OutputFixingParser.from_llm(parser=self.parser, llm=self.llm)
-        self.logger = logging.getLogger(__name__)
-        self._default_response = FinalRHPlan(
-            faisabilite="Non",
-            conditions_reussite=["Vérifier les logs système"],
-            score_confiance=0.0,
-            recommandation="Erreur technique dans l'analyse",
-            risques_principaux=["Erreur technique dans l'analyse"]
-        )
+logger = logging.getLogger(__name__)
 
-    def invoke(self, input: Dict[str, Any]) -> Dict[str, Any]:
-        try:
-            answers = input.get("answers", {})
-            critiques = input.get("critiques", {})
-            validations = input.get("validations", {})
+@tool("FinalRHTool")
+def final_agent_rh_tool(input: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Synthétise les résultats de plusieurs agents RH spécialisés pour produire une 
+    décision finale claire et structurée sur la faisabilité d’un projet RH.
 
-            # Limiter la taille pour éviter prompt trop long
-            answers_str = json.dumps(answers, ensure_ascii=False)[:1500]
-            critiques_str = json.dumps(critiques, ensure_ascii=False)[:1000]
-            validations_str = json.dumps(validations, ensure_ascii=False)[:1000]
+    Utilise un LLM pour analyser les réponses, critiques et validations fournies,
+    et retourne un JSON validé contenant :
+      - faisabilite (str) : "Oui", "Non" ou "Partiel"
+      - conditions_reussite (List[str]) : conditions nécessaires à la réussite
+      - score_confiance (float) : score de confiance entre 0.0 et 1.0
+      - recommandation (str) : synthèse concise et exploitable
+      - risques_principaux (List[str]) : principaux risques identifiés
 
-            prompt = f"""
+    Args:
+        input (Dict[str, Any]): Dictionnaire avec les clés suivantes :
+            - "answers": réponses des agents spécialisés (dict)
+            - "critiques": critiques issues des analyses (dict)
+            - "validations": résultats des validations (dict)
+
+    Returns:
+        Dict[str, Any]: Dictionnaire conforme au modèle FinalRHPlan décrivant la synthèse finale.
+
+    En cas d'erreur, retourne une réponse par défaut indiquant une erreur technique.
+    """
+    llm = LLMManager().get_llm()
+    parser = PydanticOutputParser(pydantic_object=FinalRHPlan)
+    fixing_parser = OutputFixingParser.from_llm(parser=parser, llm=llm)
+
+    default_response = FinalRHPlan(
+        faisabilite="Non",
+        conditions_reussite=["Vérifier les logs système"],
+        score_confiance=0.0,
+        recommandation="Erreur technique dans l'analyse",
+        risques_principaux=["Erreur technique dans l'analyse"]
+    )
+
+    try:
+        answers = input.get("answers", {})
+        critiques = input.get("critiques", {})
+        validations = input.get("validations", {})
+
+        answers_str = json.dumps(answers, ensure_ascii=False)[:1500]
+        critiques_str = json.dumps(critiques, ensure_ascii=False)[:1000]
+        validations_str = json.dumps(validations, ensure_ascii=False)[:1000]
+
+        prompt = f"""
 [SYSTEM]
 Tu es un expert en synthèse RH stratégique.
 
@@ -55,37 +78,19 @@ Ne jamais inclure de texte hors JSON.
 Corrige les erreurs de format si besoin.
 """
 
-            raw_response = self.llm.invoke(prompt)
-            self.logger.debug(f"[FinalRHAgent] Réponse brute LLM : {repr(raw_response)}")
+        raw_response = llm.invoke(prompt)
+        logger.debug(f"[FinalRHTool] Réponse brute LLM : {repr(raw_response)}")
 
-            # Nettoyage simple
-            cleaned_response = raw_response.strip()
-            if cleaned_response.startswith("```json"):
-                cleaned_response = cleaned_response[7:]
-            if cleaned_response.endswith("```"):
-                cleaned_response = cleaned_response[:-3]
-            cleaned_response = cleaned_response.strip()
+        cleaned_response = raw_response.strip()
+        if cleaned_response.startswith("```json"):
+            cleaned_response = cleaned_response[7:]
+        if cleaned_response.endswith("```"):
+            cleaned_response = cleaned_response[:-3]
+        cleaned_response = cleaned_response.strip()
 
-            # Parsing + correction auto
-            parsed = self.fixing_parser.parse(cleaned_response)
+        parsed = fixing_parser.parse(cleaned_response)
+        return parsed.dict()
 
-            # Sauvegarde optionnelle, à adapter selon besoin
-            # self._save_to_json(parsed.dict(), filename="result_final_rh.json")
-
-            return parsed.dict()
-
-        except Exception as e:
-            self.logger.error(f"[FinalRHAgent] Erreur invoke : {str(e)}", exc_info=True)
-            return self._default_response.dict()
-
-    # Si tu veux garder la méthode de sauvegarde
-    # def _save_to_json(self, data: Dict[str, Any], filename: str):
-    #     try:
-    #         with open(filename, "w", encoding="utf-8") as f:
-    #             json.dump(data, f, ensure_ascii=False, indent=2)
-    #         self.logger.info(f"[FinalRHAgent] Résultat sauvegardé dans {filename}")
-    #     except Exception as e:
-    #         self.logger.error(f"[FinalRHAgent] Erreur de sauvegarde fichier : {str(e)}")
-
-    async def ainvoke(self, input: Dict[str, Any]) -> Dict[str, Any]:
-        return self.invoke(input)
+    except Exception as e:
+        logger.error(f"[FinalRHTool] Erreur invoke : {str(e)}", exc_info=True)
+        return default_response.dict()

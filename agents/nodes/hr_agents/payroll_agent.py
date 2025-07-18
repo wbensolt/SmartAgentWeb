@@ -1,37 +1,59 @@
-from langchain_core.runnables import Runnable
+from langchain_core.tools import tool
 from langchain.output_parsers import PydanticOutputParser, OutputFixingParser
 from agents.nodes.hr_agents.schema import PayrollPlan
 from core.llm_providers import LLMManager
 from typing import Dict, Any
-from pydantic import BaseModel
 import logging
 import json
 
-class PayrollAgent(Runnable):
-    def __init__(self, llm=None):
-        self.llm = llm or LLMManager().get_llm()
-        self.parser = PydanticOutputParser(pydantic_object=PayrollPlan)
-        self.fixing_parser = OutputFixingParser.from_llm(parser=self.parser, llm=self.llm)
-        self.logger = logging.getLogger(__name__)
-        self._default_response = PayrollPlan(
-            cout_mensuel="erreur",
-            budget_suffisant="non",
-            analyse_cout="Erreur d'analyse",
-            recommandations=["Contacter le service RH"]
-        )
+logger = logging.getLogger(__name__)
 
-    def invoke(self, input: Dict[str, Any]) -> Dict[str, Any]:
-        query = str(input.get("query", ""))[:500]
-        state: Dict[str, Any] = input.get("state", {})
+@tool("PayrollTool")
+def payroll_agent_tool(input: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Estime le coût mensuel d'un projet RH et analyse si le budget est suffisant.
 
-        # 🔍 Récupérer le contexte de l’entreprise si disponible
-        data_analytics = state.get("data_analytics", {})
-        budget_moyen = data_analytics.get("budget_moyen", "inconnu")
-        capacites_disponibles = data_analytics.get("capacites_disponibles", [])
-        capacites_json = json.dumps(capacites_disponibles, ensure_ascii=False, indent=2)
+    Cette fonction utilise un LLM pour évaluer le coût mensuel approximatif du projet
+    à partir d'une description utilisateur et du contexte interne de l'entreprise,
+    notamment le budget moyen des projets et les compétences disponibles.
 
-        # 🔧 Prompt enrichi avec contexte interne
-        prompt = f"""
+    Le LLM doit retourner un JSON strict comprenant :
+    - cout_mensuel : estimation du coût mensuel (ex : "133k€")
+    - budget_suffisant : "oui" ou "non" selon l'adéquation du budget
+    - analyse_cout : explication brève de l'évaluation budgétaire
+    - recommandations : liste de suggestions pour optimiser le budget ou le projet
+
+    Args:
+        input (Dict[str, Any]): Dictionnaire contenant :
+            - "query" (str) : description textuelle du projet (limité à 500 caractères)
+            - "state" (dict, optionnel) : contexte interne avec données analytiques 
+              (ex : budget moyen, compétences disponibles)
+
+    Returns:
+        Dict[str, Any]: Résultat analysé conforme au schéma PayrollPlan,
+        ou une réponse par défaut en cas d'erreur.
+    """
+    logger.info("[PayrollAgent] Analyse du prompt projet lancé.")
+    llm = LLMManager().get_llm()
+    parser = PydanticOutputParser(pydantic_object=PayrollPlan)
+    fixing_parser = OutputFixingParser.from_llm(parser=parser, llm=llm)
+
+    default_response = PayrollPlan(
+        cout_mensuel="erreur",
+        budget_suffisant="non",
+        analyse_cout="Erreur d'analyse",
+        recommandations=["Contacter le service RH"]
+    )
+
+    query = str(input.get("query", ""))[:500]
+    state: Dict[str, Any] = input.get("state", {})
+
+    data_analytics = state.get("data_analytics", {})
+    budget_moyen = data_analytics.get("budget_moyen", "inconnu")
+    capacites_disponibles = data_analytics.get("capacites_disponibles", [])
+    capacites_json = json.dumps(capacites_disponibles, ensure_ascii=False, indent=2)
+
+    prompt = f"""
 [SYSTEM]
 Tu es un expert paie et budget.
 
@@ -58,23 +80,20 @@ Réponds STRICTEMENT avec un JSON VALIDE au format suivant :
 - Si des compétences internes existent, priorise leur usage pour réduire les coûts.
 """
 
-        try:
-            response = self.llm.invoke(prompt)
-            self.logger.debug(f"Réponse brute LLM : {response}")
+    try:
+        response = llm.invoke(prompt)
+        logger.debug(f"Réponse brute LLM : {response}")
 
-            cleaned_response = response.strip()
-            if cleaned_response.startswith("```json"):
-                cleaned_response = cleaned_response[7:]
-            if cleaned_response.endswith("```"):
-                cleaned_response = cleaned_response[:-3]
-            cleaned_response = cleaned_response.strip()
+        cleaned_response = response.strip()
+        if cleaned_response.startswith("```json"):
+            cleaned_response = cleaned_response[7:]
+        if cleaned_response.endswith("```"):
+            cleaned_response = cleaned_response[:-3]
+        cleaned_response = cleaned_response.strip()
 
-            parsed = self.fixing_parser.parse(cleaned_response)
-            return parsed.dict()
+        parsed = fixing_parser.parse(cleaned_response)
+        return parsed.dict()
 
-        except Exception as e:
-            self.logger.error(f"PayrollAgent error: {str(e)}", exc_info=True)
-            return self._default_response.dict()
-
-    async def ainvoke(self, input: Dict[str, Any]) -> Dict[str, Any]:
-        return self.invoke(input)
+    except Exception as e:
+        logger.error(f"PayrollTool error: {str(e)}", exc_info=True)
+        return default_response.dict()

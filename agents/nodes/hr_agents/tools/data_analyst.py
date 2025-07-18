@@ -101,7 +101,28 @@ def extraire_localisation(query: str, villes_connues=None) -> str:
 @tool
 def analyse_data_analyst(query: str) -> dict:
     """
-    Analyse un prompt projet et retourne les insights RH liés à la faisabilité.
+    Analyse une requête utilisateur décrivant un projet et fournit une évaluation RH de faisabilité.
+
+    Cette fonction utilise :
+    - un retriever vectoriel (Chroma) pour obtenir du contexte externe,
+    - des données internes extraites d'une base SQLite (`northwind_company.db`) sur le budget moyen,
+      le délai moyen de lancement de projets, et les compétences disponibles,
+    - des fonctions NLP pour extraire la localisation, le budget et le délai depuis la requête utilisateur.
+
+    Elle compile ces données dans un prompt destiné à un LLM pour obtenir une réponse en format JSON,
+    qui inclut les éléments suivants :
+    - bassin d'emploi,
+    - disponibilité des profils,
+    - tendances du marché,
+    - budget/délai moyen vs utilisateur,
+    - localisation,
+    - et les compétences internes disponibles.
+
+    Args:
+        query (str): Requête textuelle de l'utilisateur décrivant un projet.
+
+    Returns:
+        dict: Résultat de l'analyse sous forme de dictionnaire JSON.
     """
     logger.info("[DataAnalyst] Analyse du prompt projet lancé.")
     logger.info("[DataAnalyst] Prompt reçu : %s", query)
