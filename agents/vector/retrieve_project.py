@@ -161,7 +161,7 @@ def create_project_graph() -> StateGraph:
         )
 
         # Mémoire dédiée par agent
-        memories = {
+        """memories = {
             "dataanalyst": ConversationBufferMemory(memory_key="chat_history", return_messages=True),
             "recruiter": ConversationBufferMemory(memory_key="chat_history", return_messages=True),
             "rh": ConversationBufferMemory(memory_key="chat_history", return_messages=True),
@@ -171,44 +171,44 @@ def create_project_graph() -> StateGraph:
             "critique": ConversationBufferMemory(memory_key="chat_history", return_messages=True),
             "validation": ConversationBufferMemory(memory_key="chat_history", return_messages=True),
             "final": ConversationBufferMemory(memory_key="chat_history", return_messages=True),
-        }
+        }"""
 
         # Initialisation agents LangChain
         dataanalyst = initialize_agent(
             tools=[analyse_rh_tool], llm=llm, agent=AgentType.OPENAI_FUNCTIONS,
-            memory=memories["dataanalyst"], verbose=True
+            memory=None, verbose=False #memories["dataanalyst"]
         )
         recruiter_agent = initialize_agent(
             tools=[recruiter_tool], llm=llm, agent=AgentType.OPENAI_FUNCTIONS,
-            memory=memories["recruiter"], verbose=True
+            memory=None, verbose=False #memories["recruiter"]
         )
         rh_agent = initialize_agent(
             tools=[rh_tool], llm=llm, agent=AgentType.OPENAI_FUNCTIONS,
-            memory=memories["rh"], verbose=True
+            memory=None, verbose=False #memories["rh"]
         )
         talent_agent = initialize_agent(
             tools=[talent_tool], llm=llm, agent=AgentType.OPENAI_FUNCTIONS,
-            memory=memories["talent"], verbose=True
+            memory=None, verbose=False #memories["talent"]
         )
         onboarding_agent = initialize_agent(
             tools=[onboarding_tool], llm=llm, agent=AgentType.OPENAI_FUNCTIONS,
-            memory=memories["onboarding"], verbose=True
+            memory=None, verbose=False #memories["onboarding"]
         )
         payroll = initialize_agent(
             tools=[payroll_tool], llm=llm, agent=AgentType.OPENAI_FUNCTIONS,
-            memory=memories["payroll"], verbose=True
+            memory=None, verbose=False #memories["payroll"]
         )
         critique = initialize_agent(
             tools=[critique_rh_tool], llm=llm, agent=AgentType.OPENAI_FUNCTIONS,
-            memory=memories["critique"], verbose=True
+            memory=None, verbose=False #memories["critique"]
         )
         validation = initialize_agent(
             tools=[validation_rh_tool], llm=llm, agent=AgentType.OPENAI_FUNCTIONS,
-            memory=memories["validation"], verbose=True
+            memory=None, verbose=False #memories["validation"]
         )
         final = initialize_agent(
             tools=[final_rh_tool], llm=llm, agent=AgentType.OPENAI_FUNCTIONS,
-            memory=memories["final"], verbose=True
+            memory=None, verbose=False #memories["final"]
         )
 
     except Exception as e:
