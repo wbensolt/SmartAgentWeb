@@ -4,7 +4,7 @@ from langgraph.graph import StateGraph, END
 from agents.vector.state_schema import GraphState
 from core.llm_providers import LLMManager
 from agents.nodes.hr_agents.tools.data_analyst import analyse_data_analyst
-from agents.nodes.hr_agents.recruiter_agent import recruit_candidates  
+from agents.nodes.hr_agents.recruiter_agent import recruit_candidates, recruit_candidates_wrapper
 from agents.nodes.hr_agents.rhagent import check_labor_law
 from agents.nodes.hr_agents.payroll_agent import payroll_agent_tool
 from agents.nodes.hr_agents.onboarding_agent import onboarding_agent_tool
@@ -120,7 +120,7 @@ def create_project_graph() -> StateGraph:
             description="Analyse les besoins RH de l'entreprise"
         )
         recruiter_tool = Tool.from_function(
-            func=recruiter_tool_wrapper,
+            func=recruit_candidates_wrapper,
             name="Recruiter",
             description="Recherche des profils candidats selon la requête et données RH"
         )
@@ -176,7 +176,7 @@ def create_project_graph() -> StateGraph:
         # Initialisation agents LangChain
         dataanalyst = initialize_agent(
             tools=[analyse_rh_tool], llm=llm, agent=AgentType.OPENAI_FUNCTIONS,
-            memory=None, verbose=False #memories["dataanalyst"]
+            memory=None, verbose=True #memories["dataanalyst"]
         )
         recruiter_agent = initialize_agent(
             tools=[recruiter_tool], llm=llm, agent=AgentType.OPENAI_FUNCTIONS,
@@ -220,16 +220,14 @@ def create_project_graph() -> StateGraph:
         def wrapper(state: GraphState) -> Dict[str, Any]:
             try:
                 # Gestion spéciale pour le recruteur
+                
                 if node_name == "recruiter":
                     data = state.data_analytics or {}
                     if hasattr(data, "dict"):
                         data = data.dict()
-                    input_data = {
-                        "input": state.query,
-                        "data": data
-                    }
-                    result = recruiter_tool_wrapper(json.dumps(input_data, ensure_ascii=False))
-                
+                    input_data = {"input": state.query, "data": data}
+                    json_str = json.dumps(input_data, ensure_ascii=False)
+                    result = recruiter_agent.invoke({"input": json_str})
                 # Gestion spéciale pour RH
                 elif node_name == "rh":
                     data = state.data_analytics or {}
@@ -273,7 +271,7 @@ def create_project_graph() -> StateGraph:
     # Configuration des nœuds
     nodes_config = [
         ("dataanalyst", dataanalyst, "data_analytics"),
-        ("recruiter", recruiter_agent, "recruiter"),
+        ("recruiter", None, "recruiter"),
         ("rh", rh_agent, "rh"),
         ("talent", talent_agent, "talent"),
         ("onboarding", onboarding_agent, "onboarding"),

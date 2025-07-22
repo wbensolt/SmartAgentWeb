@@ -1,7 +1,9 @@
 # === FICHIER: main.py ===
 
 import sys
+import os
 import json
+from datetime import datetime
 import re
 from agents.vector.retrieve_project import create_project_graph
 #from agents.vector.retrieve import create_dynamic_rh_graph, ensure_index
@@ -30,6 +32,10 @@ def clean_response(text):
 def run_smart_agent():
     print("🧠 Lancement du Smart RH Project Agent...")
     graph = create_project_graph().compile()
+
+    # Créer le dossier outputs s'il n'existe pas
+    os.makedirs("outputs", exist_ok=True)
+
     while True:
         query = input("\nPose ta question (ou 'exit') > ")
         if query.lower() == "exit":
@@ -40,10 +46,13 @@ def run_smart_agent():
         print("[DEBUG] Réponse brute avant nettoyage :")
         print(raw_response)
 
+        json_to_save = None
+
         if isinstance(raw_response, str):
             cleaned = clean_response(raw_response)
             try:
                 parsed = json.loads(cleaned)
+                json_to_save = parsed
                 print("\n=== ✅ Réponse Smart Agent (JSON validé) ===")
                 print(json.dumps(parsed, indent=2, ensure_ascii=False))
             except Exception as e:
@@ -51,14 +60,25 @@ def run_smart_agent():
                 print("Tentative d'afficher la réponse brute :")
                 print(raw_response)
         elif isinstance(raw_response, dict):
+            json_to_save = raw_response
             print("\n=== ✅ Réponse Smart Agent (dict déjà parsé) ===")
             print(json.dumps(raw_response, indent=2, ensure_ascii=False))
         else:
             print(f"Réponse inattendue de type {type(raw_response)} :")
             print(raw_response)
 
-        print("=================================\n")
+        # Sauvegarde du JSON dans un fichier si disponible
+        if json_to_save is not None:
+            now = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"outputs/response_{now}.json"
+            try:
+                with open(filename, "w", encoding="utf-8") as f:
+                    json.dump(json_to_save, f, ensure_ascii=False, indent=2)
+                print(f"Réponse sauvegardée dans le fichier : {filename}")
+            except Exception as e:
+                print(f"Erreur lors de la sauvegarde du fichier : {e}")
 
+        print("=================================\n")
 
 """def run_rh_agent():
     print("👔 Préparation du Retriever RH dynamique...")

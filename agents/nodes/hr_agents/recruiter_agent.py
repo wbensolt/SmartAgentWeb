@@ -99,3 +99,11 @@ def recruit_candidates(query: str, data: Optional[Dict[str, Any]] = None) -> Dic
     except Exception as e:
         logger.error(str(e))
         return {"status": "error", "error": str(e)}
+
+
+def recruit_candidates_wrapper(json_input: str) -> str:
+    payload = json.loads(json_input)
+    query = payload.get("input", "")
+    data = payload.get("data", {})
+    result_dict = recruit_candidates(query, data)
+    return json.dumps(result_dict, ensure_ascii=False)
