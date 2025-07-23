@@ -1,0 +1,28 @@
+# Dossiers à ignorer
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.sqlite3
+*.db
+
+# Éviter les IDE
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+
+# Données temporaires
+.env
+.env.*
+.DS_Store
+
+# Dossiers lourds ou inutiles
+node_modules/
+tests/
+outputs/
