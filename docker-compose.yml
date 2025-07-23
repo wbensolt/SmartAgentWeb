@@ -1,0 +1,28 @@
+services:
+  fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile_fastapi
+    ports:
+      - "8000:8000"
+    networks:
+      - sma-network
+    volumes:
+      - .:/app
+
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile_streamlit
+    ports:
+      - "8501:8501"
+    networks:
+      - sma-network
+    depends_on:
+      - fastapi
+    volumes:
+      - .:/app
+
+networks:
+  sma-network:
+    driver: bridge
