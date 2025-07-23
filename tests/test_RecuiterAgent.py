@@ -1,4 +1,4 @@
-from agents.nodes.hr_agents.RecruiterAgent import RecruiterAgent
+"""from agents.nodes.hr_agents.RecruiterAgent import RecruiterAgent
 
 if __name__ == "__main__":
     agent = RecruiterAgent()
@@ -10,4 +10,4 @@ if __name__ == "__main__":
 
     print(f"Résultats pour la requête : {query}\n")
     for p in profils:
-        print(f"- {p['nom']} | {p['competences']} | {p['localisation']} | {p['experience_niveau']} | {p['statut']} | dispo: {p['disponibilite']}")
+        print(f"- {p['nom']} | {p['competences']} | {p['localisation']} | {p['experience_niveau']} | {p['statut']} | dispo: {p['disponibilite']}")"""

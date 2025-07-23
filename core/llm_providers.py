@@ -27,7 +27,7 @@ class LLMProvider(ABC):
         pass
 
 
-class OllamaProvider(LLMProvider):
+"""class OllamaProvider(LLMProvider):
     def __init__(self, model: str = "llama3.2:latest", temperature: float = 0.7, **kwargs):
         self.model_name = model
         self.temperature = temperature
@@ -45,7 +45,7 @@ class OllamaProvider(LLMProvider):
             "model": self.model_name,
             "temperature": self.temperature
         }
-
+"""
 
 class GroqProvider(LLMProvider):
     def __init__(self, api_key: str, model: str = "meta-llama/llama-4-scout-17b-16e-instruct", temperature: float = 0.7):#"meta-llama/llama-4-scout-17b-16e-instruct"llama3-70b-8192
@@ -103,11 +103,11 @@ class LLMManager:
                 model=self.config.llm_model,
                 temperature=self.config.temperature
             )
-        else:
+        """else:
             self.provider = OllamaProvider(
                 model=self.config.llm_model,
                 temperature=self.config.temperature
-            )
+            )"""
 
     def get_llm(self) -> Runnable:
         # Si c’est GroqProvider, on renvoie l’adaptateur Runnable

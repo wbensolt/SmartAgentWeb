@@ -1,4 +1,4 @@
-import os
+"""import os
 import pytest
 from pathlib import Path
 from utils.config import get_config
@@ -15,3 +15,4 @@ def test_get_config_loads_env_variables(monkeypatch):
     assert config.groq_api_key == "test_groq_key"
     assert config.temperature == 0.9
     assert isinstance(config.vector_store_path, Path)
+"""

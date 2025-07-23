@@ -13,6 +13,7 @@ from agents.nodes.hr_agents.validation_rh_agent import ValidationRHAgent
 from agents.nodes.hr_agents.final_rh_agent import FinalRHAgent
 from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from utils.json_utils import JSONRepairer
 from datetime import datetime
 import logging
@@ -27,6 +28,7 @@ CHROMA_PATH = "indexes/northwind_chroma"
 def get_local_retriever():
     try:
         embeddings = OllamaEmbeddings(model="mxbai-embed-large")
+        #embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
         return Chroma(persist_directory=CHROMA_PATH, embedding_function=embeddings).as_retriever(search_kwargs={"k": 3})
     except Exception as e:
         logger.error(f"Erreur d'initialisation du retriever: {str(e)}")
