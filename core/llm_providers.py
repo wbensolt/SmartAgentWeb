@@ -7,10 +7,10 @@ from pydantic import PrivateAttr
 import logging
 from langchain_core.runnables import Runnable  # Assure-toi que ce chemin est correct
 
-try:
+"""try:
     from langchain_ollama import OllamaLLM
 except ImportError:
-    from langchain.llms import Ollama as OllamaLLM
+    from langchain.llms import Ollama as OllamaLLM"""
 
 from utils.config import get_config, reset_config
 

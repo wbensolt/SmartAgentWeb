@@ -17,3 +17,5 @@ python_dateutil==2.9.0.post0
 Requests==2.32.4
 streamlit==1.46.1
 typing_extensions==4.14.1
+prometheus-fastapi-instrumentator
+langfuse

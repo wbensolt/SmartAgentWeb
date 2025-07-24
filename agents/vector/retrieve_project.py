@@ -12,7 +12,7 @@ from agents.nodes.hr_agents.critique_rh_agent import CritiqueRHAgent
 from agents.nodes.hr_agents.validation_rh_agent import ValidationRHAgent
 from agents.nodes.hr_agents.final_rh_agent import FinalRHAgent
 from langchain_chroma import Chroma
-from langchain_ollama import OllamaEmbeddings
+#from langchain_ollama import OllamaEmbeddings
 from utils.json_utils import JSONRepairer
 from datetime import datetime
 import logging
@@ -24,13 +24,19 @@ logger = logging.getLogger(__name__)
 CHROMA_PATH = "indexes/northwind_chroma"
 
 
-def get_local_retriever():
+"""def get_local_retriever():
     try:
         embeddings = OllamaEmbeddings(model="mxbai-embed-large")
         return Chroma(persist_directory=CHROMA_PATH, embedding_function=embeddings).as_retriever(search_kwargs={"k": 3})
     except Exception as e:
         logger.error(f"Erreur d'initialisation du retriever: {str(e)}")
-        raise
+        raise"""
+def get_local_retriever():
+    class DummyRetriever:
+        def get_relevant_documents(self, query):
+            return [f"Doc simulé pour '{query}'"]
+
+    return DummyRetriever()
 
 
 def clean_json_response(text: str) -> str:

@@ -3,7 +3,7 @@ import requests
 import pandas as pd
 import ast
 
-API_URL = "http://127.0.0.1:8000/feasibility/invoke"
+API_URL = "http://fastapi:8000/feasibility/invoke"
 
 def safe_convert_to_list(data):
     """Convertit en toute sécurité une chaîne en liste"""
